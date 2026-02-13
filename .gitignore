@@ -6,6 +6,9 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+# Large ONNX runtime WASM files (fetched from CDN at runtime)
+*.wasm
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
