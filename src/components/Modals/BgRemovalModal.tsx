@@ -216,7 +216,8 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lastBrushPosRef = useRef<{ x: number; y: number } | null>(null);
   const hasInitialFitRef = useRef(false);
-  const [brushCursorPos, setBrushCursorPos] = useState<{x: number, y: number} | null>(null);
+  const brushCursorRef = useRef<HTMLDivElement>(null);
+  const origImageDataRef = useRef<ImageData | null>(null);
 
   // ─── Init when modal opens ────────────────────────────────────────────
   useEffect(() => {
@@ -284,6 +285,13 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
       });
     }
   }, [workingImage, imgDim]);
+
+  // Hide brush cursor when leaving brush mode
+  useEffect(() => {
+    if (mode !== 'brush' && brushCursorRef.current) {
+      brushCursorRef.current.style.display = 'none';
+    }
+  }, [mode]);
 
   // Fit zoom only on initial open (not on every working image change)
   useEffect(() => {
@@ -401,13 +409,8 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
     };
   };
 
-  /** Paint one brush dab onto the alpha mask and the canvas */
-  const paintBrush = (x: number, y: number) => {
-    const cvs = canvasRef.current;
-    const mask = alphaMaskRef.current;
-    if (!cvs || !mask || !imgDim || !originalImage) return;
-    const { w, h } = imgDim;
-
+  /** Paint one brush dab onto the alpha mask (does NOT redraw canvas) */
+  const paintBrushMask = (x: number, y: number, mask: Uint8Array, w: number, h: number, eraseVal: number): { x0: number; y0: number; x1: number; y1: number } => {
     const radius = brushSize / 2;
     const rSq = radius * radius;
     const x0 = Math.max(0, Math.floor(x - radius));
@@ -419,78 +422,107 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
       for (let px = x0; px <= x1; px++) {
         const dx = px - x, dy = py - y;
         if (dx * dx + dy * dy <= rSq) {
-          mask[py * w + px] = brushMode === 'erase' ? 0 : 255;
+          mask[py * w + px] = eraseVal;
         }
       }
     }
+    return { x0, y0, x1, y1 };
+  };
 
-    // Redraw the affected region on canvas
+  /** Composite a dirty rect region onto the canvas from cached pixel data */
+  const compositeRegion = (x0: number, y0: number, x1: number, y1: number) => {
+    const cvs = canvasRef.current;
+    const mask = alphaMaskRef.current;
+    const origData = origImageDataRef.current;
+    if (!cvs || !mask || !origData || !imgDim) return;
+    const { w } = imgDim;
     const ctx = cvs.getContext('2d')!;
-    // Redraw full canvas (simplest correct approach for overlapping strokes)
-    // This is fast enough for interactive use since we're using putImageData
-    // Actually for performance, just update the brush bounding box
-    const origImg = (window as any).__bgRemovalOrigImg as HTMLImageElement | undefined;
-    if (!origImg) return;
-
-    // Get original pixel data for the region
-    const tmpCvs = document.createElement('canvas');
-    tmpCvs.width = w; tmpCvs.height = h;
-    const tmpCtx = tmpCvs.getContext('2d')!;
-    tmpCtx.drawImage(origImg, 0, 0);
+    const origPx = origData.data;
 
     const regionW = x1 - x0 + 1;
     const regionH = y1 - y0 + 1;
-    const origRegion = tmpCtx.getImageData(x0, y0, regionW, regionH);
-
-    // Build the composited region: checkerboard + masked original
     const compData = ctx.getImageData(x0, y0, regionW, regionH);
+    const cd = compData.data;
+
     for (let ry = 0; ry < regionH; ry++) {
+      const globalY = y0 + ry;
+      const rowOffset = globalY * w;
       for (let rx = 0; rx < regionW; rx++) {
         const globalX = x0 + rx;
-        const globalY = y0 + ry;
-        const alpha = mask[globalY * w + globalX];
+        const alpha = mask[rowOffset + globalX];
         const pi = (ry * regionW + rx) * 4;
 
         if (alpha === 0) {
-          // Checkerboard
           const isLight = (Math.floor(globalX / CB_TILE) + Math.floor(globalY / CB_TILE)) % 2 === 0;
           const c = isLight ? 0x3a : 0x2a;
-          compData.data[pi] = c;
-          compData.data[pi + 1] = c;
-          compData.data[pi + 2] = c;
-          compData.data[pi + 3] = 255;
+          cd[pi] = c; cd[pi + 1] = c; cd[pi + 2] = c; cd[pi + 3] = 255;
         } else {
-          // Original pixel
-          compData.data[pi] = origRegion.data[pi];
-          compData.data[pi + 1] = origRegion.data[pi + 1];
-          compData.data[pi + 2] = origRegion.data[pi + 2];
-          compData.data[pi + 3] = 255; // always opaque on canvas (alpha is in the mask)
+          const oi = (globalY * w + globalX) * 4;
+          cd[pi] = origPx[oi]; cd[pi + 1] = origPx[oi + 1]; cd[pi + 2] = origPx[oi + 2]; cd[pi + 3] = 255;
         }
       }
     }
     ctx.putImageData(compData, x0, y0);
   };
 
+  /** Paint one brush dab onto the alpha mask and the canvas */
+  const paintBrush = (x: number, y: number) => {
+    const mask = alphaMaskRef.current;
+    if (!mask || !imgDim) return;
+    const { w, h } = imgDim;
+    const eraseVal = brushMode === 'erase' ? 0 : 255;
+    const { x0, y0, x1, y1 } = paintBrushMask(x, y, mask, w, h, eraseVal);
+    compositeRegion(x0, y0, x1, y1);
+  };
+
   const interpolateBrush = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    const mask = alphaMaskRef.current;
+    if (!mask || !imgDim) return;
+    const { w, h } = imgDim;
+    const eraseVal = brushMode === 'erase' ? 0 : 255;
+
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const step = Math.max(1, brushSize / 4);
     const steps = Math.ceil(dist / step);
+
+    // Accumulate dirty rect across all dabs
+    let dirtyX0 = Infinity, dirtyY0 = Infinity, dirtyX1 = -Infinity, dirtyY1 = -Infinity;
     for (let i = 0; i <= steps; i++) {
       const t = steps === 0 ? 0 : i / steps;
-      paintBrush(from.x + dx * t, from.y + dy * t);
+      const rect = paintBrushMask(from.x + dx * t, from.y + dy * t, mask, w, h, eraseVal);
+      dirtyX0 = Math.min(dirtyX0, rect.x0);
+      dirtyY0 = Math.min(dirtyY0, rect.y0);
+      dirtyX1 = Math.max(dirtyX1, rect.x1);
+      dirtyY1 = Math.max(dirtyY1, rect.y1);
+    }
+    // Single composite pass for the entire stroke segment
+    if (dirtyX0 <= dirtyX1 && dirtyY0 <= dirtyY1) {
+      compositeRegion(dirtyX0, dirtyY0, dirtyX1, dirtyY1);
     }
   };
 
-  // Cache original image for brush performance
+  // Cache original image AND its pixel data for brush performance
   useEffect(() => {
     if (originalImage) {
       const img = new Image();
-      img.onload = () => { (window as any).__bgRemovalOrigImg = img; };
+      img.onload = () => {
+        (window as any).__bgRemovalOrigImg = img;
+        // Pre-cache pixel data so paintBrush never creates temp canvases
+        const cvs = document.createElement('canvas');
+        cvs.width = img.naturalWidth;
+        cvs.height = img.naturalHeight;
+        const ctx = cvs.getContext('2d')!;
+        ctx.drawImage(img, 0, 0);
+        origImageDataRef.current = ctx.getImageData(0, 0, img.naturalWidth, img.naturalHeight);
+      };
       img.src = originalImage;
     }
-    return () => { delete (window as any).__bgRemovalOrigImg; };
+    return () => {
+      delete (window as any).__bgRemovalOrigImg;
+      origImageDataRef.current = null;
+    };
   }, [originalImage]);
 
   const handleBrushDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -676,15 +708,24 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
             onMouseDown={handlePanStart}
             onMouseMove={(e) => {
               handlePanMove(e);
-              if (mode === 'brush' && containerRef.current) {
+              // Update brush cursor via direct DOM manipulation (no React re-render)
+              if (mode === 'brush' && containerRef.current && brushCursorRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
-                setBrushCursorPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                const cx = e.clientX - rect.left;
+                const cy = e.clientY - rect.top;
+                const size = brushSize * zoom;
+                const el = brushCursorRef.current;
+                el.style.left = `${cx - size / 2}px`;
+                el.style.top = `${cy - size / 2}px`;
+                el.style.width = `${size}px`;
+                el.style.height = `${size}px`;
+                el.style.display = 'block';
               }
             }}
             onMouseUp={handlePanEnd}
             onMouseLeave={() => {
               handlePanEnd();
-              setBrushCursorPos(null);
+              if (brushCursorRef.current) brushCursorRef.current.style.display = 'none';
             }}
             onContextMenu={e => e.preventDefault()}
           >
@@ -707,24 +748,20 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
                 style={{ display: 'block', imageRendering: zoom > 2 ? 'pixelated' : 'auto' }}
               />
             </div>
-            {/* Brush size cursor overlay */}
-            {mode === 'brush' && brushCursorPos && !isPanning && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: brushCursorPos.x - (brushSize * zoom) / 2,
-                  top: brushCursorPos.y - (brushSize * zoom) / 2,
-                  width: brushSize * zoom,
-                  height: brushSize * zoom,
-                  border: '1.5px solid rgba(255, 255, 255, 0.8)',
-                  borderRadius: '50%',
-                  pointerEvents: 'none',
-                  zIndex: 10,
-                  boxShadow: '0 0 0 1px rgba(0, 0, 0, 0.5)',
-                  transition: 'width 0.05s, height 0.05s, left 0.05s, top 0.05s',
-                }}
-              />
-            )}
+            {/* Brush size cursor overlay — positioned via ref, no React re-renders */}
+            <div
+              ref={brushCursorRef}
+              style={{
+                position: 'absolute',
+                display: 'none',
+                border: '1.5px solid rgba(255, 255, 255, 0.8)',
+                borderRadius: '50%',
+                pointerEvents: 'none',
+                zIndex: 10,
+                boxShadow: '0 0 0 1px rgba(0, 0, 0, 0.5)',
+                willChange: 'left, top, width, height',
+              }}
+            />
           </div>
         </div>
 
