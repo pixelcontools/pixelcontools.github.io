@@ -74,11 +74,14 @@ function CanvasSettings() {
   };
 
   return (
-    <div className="border-t border-border bg-gray-850">
+    <div className="border-t border-border bg-gray-850" data-region="canvas-settings">
       {/* Collapsible Header */}
       <button
+        id="btn-toggle-canvas-settings"
         onClick={() => setIsCollapsed(!isCollapsed)}
         className="w-full px-3 py-2 flex items-center justify-between text-xs font-semibold text-gray-300 hover:bg-gray-800 transition-colors group"
+        aria-label={isCollapsed ? 'Expand canvas settings' : 'Collapse canvas settings'}
+        aria-expanded={!isCollapsed}
       >
         <span>Canvas</span>
         <span className={`text-gray-400 transition-transform group-hover:drop-shadow-lg group-hover:text-gray-200 ${isCollapsed ? '' : 'rotate-180'}`}>▼</span>
@@ -92,9 +95,11 @@ function CanvasSettings() {
       <div>
         <label className="text-xs text-gray-400 block mb-1">Common Sizes</label>
         <select
+          id="select-canvas-size"
           onChange={(e) => handleCommonSizeChange(e.target.value)}
           className="w-full px-2 py-1 bg-canvas-bg border border-border rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer"
           defaultValue=""
+          aria-label="Common canvas sizes"
         >
           <option value="">Select a size...</option>
           <option value="1024x1024">1024x1024</option>
@@ -112,31 +117,40 @@ function CanvasSettings() {
         <div>
           <label className="text-xs text-gray-400 block mb-1">Width</label>
           <input
+            id="input-canvas-width"
             type="text"
             inputMode="numeric"
             value={displayWidth}
             onChange={(e) => handleWidthChange(e.target.value)}
             className="w-full px-2 py-1 bg-canvas-bg border border-border rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-400"
             placeholder="Width"
+            aria-label="Canvas width"
           />
         </div>
 
         <div>
           <label className="text-xs text-gray-400 block mb-1">Height</label>
           <input
+            id="input-canvas-height"
             type="text"
             inputMode="numeric"
             value={displayHeight}
             onChange={(e) => handleHeightChange(e.target.value)}
             className="w-full px-2 py-1 bg-canvas-bg border border-border rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-400"
             placeholder="Height"
+            aria-label="Canvas height"
           />
         </div>
       </div>
 
       {/* Crop to Layers Button */}
       <button
-        onClick={cropCanvasToLayers}
+        id="btn-crop-canvas-to-layers"
+        onClick={() => {
+          cropCanvasToLayers();
+          // Auto-fit zoom after crop settles
+          (window as any).fitCanvasToScreen?.();
+        }}
         disabled={layers.length === 0}
         className={`w-full px-3 py-2 rounded transition-colors text-xs font-medium ${
           layers.length === 0
@@ -144,6 +158,7 @@ function CanvasSettings() {
             : 'bg-slate-700 text-white hover:bg-slate-600'
         }`}
         title={layers.length === 0 ? 'Add layers first to crop canvas' : 'Crop canvas to layer bounds'}
+        aria-label="Crop canvas to layer bounds"
       >
         Crop Canvas to Layers
       </button>
@@ -153,13 +168,16 @@ function CanvasSettings() {
         <label className="text-xs text-gray-400 block mb-1">Background</label>
         <div className="flex gap-1">
           <input
+            id="input-bg-color"
             type="color"
             value={canvas.backgroundColor || '#ffffff'}
             onChange={(e) => handleBackgroundColorChange(e.target.value)}
             className="flex-1 h-8 rounded cursor-pointer border border-border"
             title="Pick background color"
+            aria-label="Background color"
           />
           <button
+            id="btn-bg-transparent"
             onClick={() => handleBackgroundColorChange('transparent')}
             className={`flex-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
               canvas.backgroundColor === null
@@ -167,6 +185,7 @@ function CanvasSettings() {
                 : 'bg-panel-bg text-gray-400 hover:text-gray-300'
             }`}
             title="Set background to transparent"
+            aria-label="Set background to transparent"
           >
             Clear
           </button>
@@ -180,13 +199,14 @@ function CanvasSettings() {
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
-            id="borderEnabled"
+            id="input-border-enabled"
             checked={canvas.borderEnabled ?? true}
             onChange={(e) => setCanvasConfig({ borderEnabled: e.target.checked })}
             className="w-4 h-4 rounded cursor-pointer"
             title="Enable or disable canvas border"
+            aria-label="Enable or disable canvas border"
           />
-          <label htmlFor="borderEnabled" className="text-xs text-gray-400 cursor-pointer flex-1">
+          <label htmlFor="input-border-enabled" className="text-xs text-gray-400 cursor-pointer flex-1">
             Show Border
           </label>
         </div>
@@ -199,6 +219,7 @@ function CanvasSettings() {
         <div>
           <label className="text-xs text-gray-400 block mb-1">Intensity</label>
           <input
+            id="input-shadow-intensity"
             type="range"
             min="0"
             max="1"
@@ -207,6 +228,7 @@ function CanvasSettings() {
             onChange={(e) => setCanvasConfig({ shadowIntensity: parseFloat(e.target.value) })}
             className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer"
             title="Shadow intensity (0 = off, 1 = max)"
+            aria-label="Shadow intensity"
           />
           <div className="text-xs text-gray-500 mt-1">
             {Math.round((canvas.shadowIntensity ?? 0.5) * 100)}%
@@ -219,14 +241,15 @@ function CanvasSettings() {
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
-            id="checkerboardBg"
+            id="input-checkered-bg"
             checked={canvas.showCheckeredBackground ?? false}
             onChange={(e) => setCanvasConfig({ showCheckeredBackground: e.target.checked })}
             disabled={canvas.backgroundColor !== null}
             className="w-4 h-4 rounded cursor-pointer disabled:opacity-50"
             title="Show checkered pattern for transparency (only available when background is transparent)"
+            aria-label="Show checkered background"
           />
-          <label htmlFor="checkerboardBg" className={`text-xs cursor-pointer flex-1 ${canvas.backgroundColor !== null ? 'text-gray-600' : 'text-gray-400'}`}>
+          <label htmlFor="input-checkered-bg" className={`text-xs cursor-pointer flex-1 ${canvas.backgroundColor !== null ? 'text-gray-600' : 'text-gray-400'}`}>
             Checkered Background
           </label>
         </div>
@@ -237,13 +260,14 @@ function CanvasSettings() {
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
-            id="dragInfoEnabled"
+            id="input-drag-info"
             checked={canvas.dragInfoEnabled ?? true}
             onChange={(e) => setCanvasConfig({ dragInfoEnabled: e.target.checked })}
             className="w-4 h-4 rounded cursor-pointer"
             title="Show drag translation info when dragging layers"
+            aria-label="Show drag info tooltip"
           />
-          <label htmlFor="dragInfoEnabled" className="text-xs text-gray-400 cursor-pointer flex-1">
+          <label htmlFor="input-drag-info" className="text-xs text-gray-400 cursor-pointer flex-1">
             Show Drag Info
           </label>
         </div>

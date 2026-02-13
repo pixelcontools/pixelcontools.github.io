@@ -108,53 +108,36 @@ function GridOverlay({ canvas, gridEnabled, viewport, canvasWidth, canvasHeight,
     ctx.rect(canvasScreenX, canvasScreenY, canvasScreenWidth, canvasScreenHeight);
     ctx.clip();
 
-    // Calculate the top-left corner of the canvas in screen space
-    const centerX = gridCanvas.width / 2;
-    const centerY = gridCanvas.height / 2;
-    
-    const canvasCenterWorldX = canvasWidth / 2;
-    const canvasCenterWorldY = canvasHeight / 2;
-    
-    // Optional padding on grid alignment
-    const paddingLeft = 0;
-    const paddingTop = 0;
-    
-    // World coordinates of top-left corner of visible canvas
-    const worldStartX = canvasCenterWorldX - (centerX - paddingLeft) / zoom + viewport.panX;
-    const worldStartY = canvasCenterWorldY - (centerY - paddingTop) / zoom + viewport.panY;
+    // Derive grid positions directly from the actual canvas element's bounding rect.
+    // This is pixel-perfect because it uses the real rendered position and size,
+    // rather than trying to reproduce the CSS transform math independently.
+    const pixelWidth = canvasScreenWidth / canvasWidth;
+    const pixelHeight = canvasScreenHeight / canvasHeight;
+
+    // Determine visible range in world pixels to avoid drawing off-screen lines
+    const visibleStartX = Math.max(0, Math.floor(-canvasScreenX / pixelWidth));
+    const visibleEndX = Math.min(canvasWidth, Math.ceil((gridCanvas.width - canvasScreenX) / pixelWidth));
+    const visibleStartY = Math.max(0, Math.floor(-canvasScreenY / pixelHeight));
+    const visibleEndY = Math.min(canvasHeight, Math.ceil((gridCanvas.height - canvasScreenY) / pixelHeight));
 
     // Draw vertical grid lines (every N pixels based on effective density)
-    const firstX = Math.floor(worldStartX / effectiveGridDensity) * effectiveGridDensity;
-    const lastX = Math.ceil((worldStartX + gridCanvas.width / zoom) / effectiveGridDensity) * effectiveGridDensity;
-    
-    for (let worldX = firstX; worldX <= lastX; worldX += effectiveGridDensity) {
-      // Calculate screen position and snap to whole pixels
-      const screenX = Math.round((worldX - worldStartX) * zoom);
-      
-      // Only draw if within bounds
-      if (screenX >= 0 && screenX <= gridCanvas.width) {
-        ctx.beginPath();
-        ctx.moveTo(screenX, 0);
-        ctx.lineTo(screenX, gridCanvas.height);
-        ctx.stroke();
-      }
+    const firstX = Math.ceil(visibleStartX / effectiveGridDensity) * effectiveGridDensity;
+    for (let worldX = firstX; worldX <= visibleEndX; worldX += effectiveGridDensity) {
+      const screenX = Math.round(canvasScreenX + worldX * pixelWidth) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(screenX, canvasScreenY);
+      ctx.lineTo(screenX, canvasScreenY + canvasScreenHeight);
+      ctx.stroke();
     }
 
     // Draw horizontal grid lines (every N pixels based on effective density)
-    const firstY = Math.floor(worldStartY / effectiveGridDensity) * effectiveGridDensity;
-    const lastY = Math.ceil((worldStartY + gridCanvas.height / zoom) / effectiveGridDensity) * effectiveGridDensity;
-    
-    for (let worldY = firstY; worldY <= lastY; worldY += effectiveGridDensity) {
-      // Calculate screen position and snap to whole pixels
-      const screenY = Math.round((worldY - worldStartY) * zoom);
-      
-      // Only draw if within bounds
-      if (screenY >= 0 && screenY <= gridCanvas.height) {
-        ctx.beginPath();
-        ctx.moveTo(0, screenY);
-        ctx.lineTo(gridCanvas.width, screenY);
-        ctx.stroke();
-      }
+    const firstY = Math.ceil(visibleStartY / effectiveGridDensity) * effectiveGridDensity;
+    for (let worldY = firstY; worldY <= visibleEndY; worldY += effectiveGridDensity) {
+      const screenY = Math.round(canvasScreenY + worldY * pixelHeight) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(canvasScreenX, screenY);
+      ctx.lineTo(canvasScreenX + canvasScreenWidth, screenY);
+      ctx.stroke();
     }
     
     // Restore context to remove clipping

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import DraggableModal from './DraggableModal';
+import { usePortraitMode } from '../../hooks/usePortraitMode';
 import useCompositorStore from '../../store/compositorStore';
 import { Layer } from '../../types/compositor.types';
 import { rasterizeShape } from '../../utils/shapeRasterizer';
@@ -17,6 +18,7 @@ const ShapeModal: React.FC<ShapeModalProps> = ({ isOpen, onClose, existingLayer 
   const addLayer = useCompositorStore((state) => state.addLayer);
   const updateLayer = useCompositorStore((state) => state.updateLayer);
   const removeLayer = useCompositorStore((state) => state.removeLayer);
+  const isPortrait = usePortraitMode();
 
   const [shapeType, setShapeType] = useState<'rectangle' | 'circle' | 'triangle' | 'hexagon' | 'octagon' | 'star'>('rectangle');
   const [size, setSize] = useState<number>(200);
@@ -260,10 +262,11 @@ const ShapeModal: React.FC<ShapeModalProps> = ({ isOpen, onClose, existingLayer 
       onClose={onClose}
       title={existingLayer ? 'Edit Shape Layer' : 'Create Shape Layer'}
       noPadding={true}
+      modalId="modal-shape"
     >
-      <div className="flex text-gray-200 h-full w-full overflow-hidden">
-        {/* Left: Controls */}
-        <div className="w-80 border-r border-gray-700 flex-shrink-0 flex flex-col overflow-hidden bg-gray-800">
+      <div className={`${isPortrait ? 'flex flex-col-reverse' : 'flex'} text-gray-200 h-full w-full overflow-hidden`}>
+        {/* Controls */}
+        <div className={`${isPortrait ? 'border-t max-h-[45vh]' : 'w-80 border-r'} border-gray-700 flex-shrink-0 flex flex-col overflow-hidden bg-gray-800`}>
           <div className="overflow-y-auto flex-1 p-4 space-y-4">
             
             {/* Shape Type Selection */}
@@ -292,7 +295,7 @@ const ShapeModal: React.FC<ShapeModalProps> = ({ isOpen, onClose, existingLayer 
               <div className="space-y-1">
                 <input
                   type="range"
-                  min="10"
+                  min="1"
                   max="500"
                   value={size}
                   onChange={(e) => setSize(Number(e.target.value))}
@@ -303,7 +306,7 @@ const ShapeModal: React.FC<ShapeModalProps> = ({ isOpen, onClose, existingLayer 
                   <input
                     type="number"
                     value={size}
-                    onChange={(e) => setSize(Math.max(10, Math.min(500, parseInt(e.target.value) || size)))}
+                    onChange={(e) => setSize(Math.max(1, Math.min(500, parseInt(e.target.value) || size)))}
                     className="flex-1 px-2 py-1 bg-gray-900 border border-gray-600 rounded text-xs text-white"
                   />
                 </div>

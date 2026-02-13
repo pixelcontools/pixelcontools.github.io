@@ -295,14 +295,16 @@ function ColorAnalysis({ layer }: { layer: Layer }) {
   };
 
   return (
-    <div className="bg-panel-bg rounded p-3 space-y-2">
+    <div className="bg-panel-bg rounded p-3 space-y-2" data-region="color-analysis">
       <div className="text-xs font-semibold text-gray-300">Analyze Colors</div>
 
       {/* RGB Analysis Button */}
       <button
+        id="btn-analyze-rgb"
         onClick={() => analyzeColors(false)}
         disabled={isAnalyzing}
         className="w-full px-3 py-1 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-xs font-medium text-blue-400 rounded transition-colors"
+        aria-label="Analyze RGB colors"
       >
         {isAnalyzing ? 'Analyzing...' : 'Get Colors...'}
       </button>
@@ -313,9 +315,11 @@ function ColorAnalysis({ layer }: { layer: Layer }) {
           <div className="flex items-center justify-between text-xs text-gray-400">
             <span>{colorsRGB.length} colors (RGB) • {Math.floor(colorsRGB.reduce((sum, c) => sum + c.count, 0))} pixels</span>
             <button
+              id="btn-copy-rgb-colors"
               onClick={() => copyAllColorsToClipboard(colorsRGB, false)}
               className="p-1 text-gray-500 hover:text-gray-300 transition-colors flex-shrink-0"
               title="Copy all colors to clipboard"
+              aria-label="Copy all RGB colors to clipboard"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M4 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V2z" />
@@ -332,9 +336,11 @@ function ColorAnalysis({ layer }: { layer: Layer }) {
 
       {/* RGBA Analysis Button */}
       <button
+        id="btn-analyze-rgba"
         onClick={() => analyzeColors(true)}
         disabled={isAnalyzing}
         className="w-full px-3 py-1 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-xs font-medium text-purple-400 rounded transition-colors"
+        aria-label="Analyze RGBA colors"
       >
         {isAnalyzing ? 'Analyzing...' : 'Get Colors (inc. transparent pixels)...'}
       </button>
@@ -345,9 +351,11 @@ function ColorAnalysis({ layer }: { layer: Layer }) {
           <div className="flex items-center justify-between text-xs text-gray-400">
             <span>{colorsRGBA.length} colors (RGBA) • {Math.floor(colorsRGBA.reduce((sum, c) => sum + c.count, 0))} pixels</span>
             <button
+              id="btn-copy-rgba-colors"
               onClick={() => copyAllColorsToClipboard(colorsRGBA, true)}
               className="p-1 text-gray-500 hover:text-gray-300 transition-colors flex-shrink-0"
               title="Copy all colors to clipboard"
+              aria-label="Copy all RGBA colors to clipboard"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M4 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V2z" />

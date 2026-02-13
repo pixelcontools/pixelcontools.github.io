@@ -9,11 +9,11 @@ function ZoomControls() {
   const canvas = useCompositorStore((state) => state.project.canvas);
   const setViewport = useCompositorStore((state) => state.setViewport);
 
-  const ZOOM_LEVELS = [25, 33, 50, 66, 100, 150, 200, 400, 800, 1600, 3200];
+  const ZOOM_LEVELS = [25, 33, 50, 66, 75, 100, 125, 150, 200, 400, 800, 1600, 3200];
 
   const calculateFitZoom = (): number => {
     // Find the canvas container element
-    const container = document.querySelector('[data-canvas-container="true"]');
+    const container = document.querySelector('[data-region="canvas"]');
     if (!container) {
       return 100; // Fallback to 100%
     }
@@ -68,19 +68,23 @@ function ZoomControls() {
   };
 
   return (
-    <div className="flex items-center gap-2 bg-canvas-bg rounded px-2 py-1">
+    <div className="flex items-center gap-2 bg-canvas-bg rounded px-2 py-1" data-region="zoom-controls">
       <button
+        id="btn-zoom-out"
         onClick={handleZoomOut}
         className="px-2 py-1 text-sm font-medium text-gray-300 hover:text-white bg-panel-bg hover:bg-gray-700 rounded transition-colors"
         title="Zoom Out"
+        aria-label="Zoom out"
       >
         −
       </button>
 
       <div className="relative group">
         <button
+          id="btn-zoom-level"
           className="px-3 py-1 text-sm font-medium text-gray-300 hover:text-white bg-panel-bg hover:bg-gray-700 rounded transition-colors min-w-16 text-right"
           title="Click to select zoom level"
+          aria-label={`Current zoom: ${viewport.zoom}%`}
         >
           {viewport.zoom}%
         </button>
@@ -90,12 +94,14 @@ function ZoomControls() {
           {ZOOM_LEVELS.map((zoom) => (
             <button
               key={zoom}
+              id={`btn-zoom-preset-${zoom}`}
               onClick={() => handleZoom(zoom)}
               className={`w-full text-left px-3 py-1 text-sm transition-colors ${
                 viewport.zoom === zoom
                   ? 'bg-blue-600 text-white'
                   : 'text-gray-300 hover:text-white hover:bg-gray-700'
               }`}
+              aria-label={`Set zoom to ${zoom}%`}
             >
               {zoom}%
             </button>
@@ -104,9 +110,11 @@ function ZoomControls() {
       </div>
 
       <button
+        id="btn-zoom-in"
         onClick={handleZoomIn}
         className="px-2 py-1 text-sm font-medium text-gray-300 hover:text-white bg-panel-bg hover:bg-gray-700 rounded transition-colors"
         title="Zoom In"
+        aria-label="Zoom in"
       >
         +
       </button>
@@ -114,9 +122,11 @@ function ZoomControls() {
       <div className="w-px h-4 bg-border"></div>
 
       <button
+        id="btn-zoom-reset"
         onClick={handleResetZoom}
         className="px-2 py-1 text-xs font-medium text-gray-400 hover:text-gray-300 hover:bg-gray-700 rounded transition-colors"
         title="Fit canvas to screen"
+        aria-label="Fit canvas to screen"
       >
         Reset
       </button>

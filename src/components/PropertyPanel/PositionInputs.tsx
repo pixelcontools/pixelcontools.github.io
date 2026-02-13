@@ -65,13 +65,14 @@ function PositionInputs({ layer }: PositionInputsProps) {
   };
 
   return (
-    <div className="bg-panel-bg rounded p-3 space-y-3">
+    <div className="bg-panel-bg rounded p-3 space-y-3" data-region="position-inputs">
       <div className="text-xs font-semibold text-gray-300">Position</div>
 
       {/* X Position */}
       <div>
         <label className="text-xs text-gray-400 block mb-1">X</label>
         <input
+          id="input-layer-x"
           type="text"
           inputMode="numeric"
           value={inputX}
@@ -79,6 +80,7 @@ function PositionInputs({ layer }: PositionInputsProps) {
           onBlur={handlePositionFinalized}
           className="w-full px-2 py-1 bg-canvas-bg border border-border rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-400"
           placeholder="X position"
+          aria-label="Layer X position"
         />
       </div>
 
@@ -86,6 +88,7 @@ function PositionInputs({ layer }: PositionInputsProps) {
       <div>
         <label className="text-xs text-gray-400 block mb-1">Y</label>
         <input
+          id="input-layer-y"
           type="text"
           inputMode="numeric"
           value={inputY}
@@ -93,6 +96,7 @@ function PositionInputs({ layer }: PositionInputsProps) {
           onBlur={handlePositionFinalized}
           className="w-full px-2 py-1 bg-canvas-bg border border-border rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-400"
           placeholder="Y position"
+          aria-label="Layer Y position"
         />
       </div>
 

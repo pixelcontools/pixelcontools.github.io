@@ -208,17 +208,20 @@ function Canvas() {
   };
 
   return (
-    <div className="w-full h-full flex flex-col relative" onPaste={handlePaste}>
+    <div id="canvas-container" className="w-full h-full flex flex-col relative" onPaste={handlePaste}>
       {/* Canvas Area */}
-      <div className="flex-1 relative overflow-hidden" data-canvas-container="true">
+      <div className="flex-1 relative overflow-hidden" data-region="canvas">
         <CanvasRenderer />
       </div>
 
       {/* Upload Zone Overlay (shown when no layers) */}
       {useCompositorStore((state) => state.project.layers.length === 0) && (
         <div
+          id="canvas-upload-zone"
           onClick={() => fileInputRef.current?.click()}
           className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 cursor-pointer hover:bg-opacity-40 transition-all z-10"
+          role="button"
+          aria-label="Upload images"
         >
           <div className="text-center">
             <div className="text-4xl mb-4">📁</div>
@@ -235,11 +238,13 @@ function Canvas() {
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
+        id="input-canvas-upload"
         type="file"
         multiple
         accept=".pixcomp,image/png,image/gif,image/bmp,image/jpeg"
         onChange={handleImageUpload}
         className="hidden"
+        aria-label="Upload images"
       />
     </div>
   );

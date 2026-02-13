@@ -19,18 +19,20 @@ function OpacityControl({ layer }: OpacityControlsProps) {
   const opacity = layer.opacity !== undefined ? layer.opacity : 1.0;
 
   return (
-    <div className="bg-panel-bg rounded p-3 space-y-2">
+    <div className="bg-panel-bg rounded p-3 space-y-2" data-region="opacity-control">
       <div className="text-xs font-semibold text-gray-300">Opacity</div>
       
       {/* Opacity Slider */}
       <div className="space-y-2">
         <input
+          id="input-layer-opacity"
           type="range"
           min="0"
           max="100"
           value={opacity * 100}
           onChange={(e) => handleOpacityChange(parseInt(e.target.value))}
           className="w-full h-2 bg-canvas-bg rounded appearance-none cursor-pointer accent-blue-400"
+          aria-label="Layer opacity"
         />
         
         {/* Opacity Percentage Display */}
@@ -42,16 +44,20 @@ function OpacityControl({ layer }: OpacityControlsProps) {
           {/* Quick presets */}
           <div className="flex gap-1">
             <button
+              id="btn-opacity-50"
               onClick={() => handleOpacityChange(50)}
               className="px-2 py-1 text-xs bg-canvas-bg hover:bg-border rounded transition"
               title="50% opacity"
+              aria-label="Set 50% opacity"
             >
               50%
             </button>
             <button
+              id="btn-opacity-100"
               onClick={() => handleOpacityChange(100)}
               className="px-2 py-1 text-xs bg-canvas-bg hover:bg-border rounded transition"
               title="100% opacity (fully opaque)"
+              aria-label="Set 100% opacity"
             >
               100%
             </button>

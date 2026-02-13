@@ -70,34 +70,68 @@ function FileOperations() {
   };
 
   /**
-   * Load project from .pixcomp file
+   * Load project from .pixcomp file, or add image file(s) as new layer(s)
    */
   const handleLoadProject = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
+    const files = event.target.files;
+    if (!files || files.length === 0) {
       console.warn('[DEBUG] No file selected for loading');
       return;
     }
 
-    try {
-      // console.log(`[DEBUG] Loading project from file: ${file.name}`);
-      
-      const text = await file.text();
-      const projectData = await deserializeProject(text);
+    for (const file of Array.from(files)) {
+      // Handle .pixcomp / .json project files
+      if (file.name.toLowerCase().endsWith('.pixcomp') || file.name.toLowerCase().endsWith('.json')) {
+        try {
+          const text = await file.text();
+          const projectData = await deserializeProject(text);
+          loadProject(projectData);
+          markClean();
+          alert(`Project loaded: ${file.name}`);
+        } catch (error) {
+          console.error('[DEBUG] Load project failed:', error);
+          alert(`Error loading project: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      } else if (file.type.startsWith('image/')) {
+        // Handle image files — add as a new layer
+        try {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsDataURL(file);
+          });
 
-      // console.log('[DEBUG] Project loaded and validated successfully');
-      loadProject(projectData);
-      markClean();
-      
-      alert(`Project loaded: ${file.name}`);
-    } catch (error) {
-      console.error('[DEBUG] Load project failed:', error);
-      alert(`Error loading project: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+          const img = new Image();
+          img.src = dataUrl;
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error('Failed to load image'));
+          });
+
+          const addLayer = useCompositorStore.getState().addLayer;
+          addLayer({
+            name: file.name,
+            imageData: dataUrl,
+            x: 0,
+            y: 0,
+            zIndex: useCompositorStore.getState().project.layers.length,
+            visible: true,
+            locked: false,
+            opacity: 1.0,
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+          });
+        } catch (error) {
+          console.error(`[DEBUG] Error loading image ${file.name}:`, error);
+          alert(`Error loading image ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
       }
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -150,44 +184,54 @@ function FileOperations() {
   };
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1" data-region="file-operations">
       <button
+        id="btn-new-project"
         onClick={handleNewProject}
         className="px-3 py-1 text-sm font-medium text-gray-300 hover:text-white bg-panel-bg hover:bg-gray-700 rounded transition-colors"
         title="New project"
+        aria-label="New project"
       >
         New
       </button>
 
       <button
+        id="btn-save-project"
         onClick={handleSaveProject}
         className="px-3 py-1 text-sm font-medium text-gray-300 hover:text-white bg-panel-bg hover:bg-gray-700 rounded transition-colors"
         title="Save project as .pixcomp file (Ctrl+S)"
+        aria-label="Save project"
       >
-        Save
+        Save Project
       </button>
 
       <button
+        id="btn-load-project"
         onClick={() => fileInputRef.current?.click()}
         className="px-3 py-1 text-sm font-medium text-gray-300 hover:text-white bg-panel-bg hover:bg-gray-700 rounded transition-colors"
-        title="Load project from .pixcomp file (Ctrl+O)"
+        title="Load .pixcomp project or image files (Ctrl+O)"
+        aria-label="Load project or images"
       >
         Load
       </button>
 
       <button
+        id="btn-export-png"
         onClick={handleExportPNG}
         className="px-3 py-1 text-sm font-medium text-gray-300 hover:text-white bg-panel-bg hover:bg-gray-700 rounded transition-colors"
         title="Export canvas as PNG"
+        aria-label="Export canvas as PNG"
       >
-        Export
+        Export Image
       </button>
 
       {/* Export Scale Selector (shown when hovering Export button) */}
       <div className="relative group">
         <button
+          id="btn-export-scale"
           className="px-2 py-1 text-xs font-medium text-gray-400 hover:text-gray-300 bg-panel-bg hover:bg-gray-700 rounded transition-colors opacity-0 group-hover:opacity-100"
           title="Export scale"
+          aria-label={`Export scale: ${exportScale}x`}
         >
           {exportScale}x
         </button>
@@ -197,6 +241,7 @@ function FileOperations() {
           {[1, 2, 4, 8].map((scale) => (
             <button
               key={scale}
+              id={`btn-export-scale-${scale}`}
               onClick={() => {
                 setExportScale(scale);
                 // console.log(`[DEBUG] Export scale changed to ${scale}x`);
@@ -206,6 +251,7 @@ function FileOperations() {
                   ? 'bg-blue-600 text-white'
                   : 'text-gray-300 hover:text-white hover:bg-gray-700'
               }`}
+              aria-label={`Set export scale to ${scale}x`}
             >
               {scale}x
             </button>
@@ -215,10 +261,13 @@ function FileOperations() {
 
       <input
         ref={fileInputRef}
+        id="input-load-file"
         type="file"
-        accept=".pixcomp,.json"
+        multiple
+        accept=".pixcomp,.json,image/png,image/gif,image/bmp,image/jpeg"
         onChange={handleLoadProject}
         className="hidden"
+        aria-label="Load project or image files"
       />
     </div>
   );

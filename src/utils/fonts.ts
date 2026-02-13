@@ -6,7 +6,7 @@
 export interface FontOption {
   name: string;
   value: string; // CSS font-family value
-  category: 'system' | 'google';
+  category: 'system' | 'google' | 'local';
   googleFontName?: string; // For constructing Google Fonts URL
 }
 
@@ -129,16 +129,31 @@ export async function loadGoogleFont(fontName: string): Promise<void> {
 }
 
 /**
- * Preload all Google Fonts for better UX
- * Can be called on app startup
+ * Preload ALL Google Fonts in a single request.
+ * Uses a batched Google Fonts CSS URL so the browser downloads them all at once.
+ * Returns a promise that resolves when the stylesheet has loaded.
  */
-export function preloadAllGoogleFonts(): void {
-  GOOGLE_FONTS.forEach(font => {
-    if (font.googleFontName) {
-      loadGoogleFont(font.googleFontName).catch(() => {
-        // Silently fail, individual fonts will load on demand
-      });
-    }
+let _googleFontsPreloaded = false;
+export function preloadAllGoogleFonts(): Promise<void> {
+  if (_googleFontsPreloaded) return Promise.resolve();
+  _googleFontsPreloaded = true;
+
+  const families = GOOGLE_FONTS
+    .filter(f => f.googleFontName)
+    .map(f => `family=${f.googleFontName}:wght@400;700`)
+    .join('&');
+
+  return new Promise((resolve) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
+    link.onload = () => {
+      // Mark every font as loaded so individual loadGoogleFont calls are no-ops
+      GOOGLE_FONTS.forEach(f => { if (f.googleFontName) loadedGoogleFonts.add(f.googleFontName); });
+      resolve();
+    };
+    link.onerror = () => resolve(); // fail silently
+    document.head.appendChild(link);
   });
 }
 
@@ -154,4 +169,49 @@ export function getFontByValue(value: string): FontOption | undefined {
  */
 export function getFontByName(name: string): FontOption | undefined {
   return ALL_FONTS.find(font => font.name === name);
+}
+
+/**
+ * Detect locally installed fonts using the Local Font Access API.
+ * Only available in Chromium-based browsers (Chrome 103+, Edge 103+).
+ * Returns deduplicated FontOption[] with category 'local'.
+ * Falls back to empty array if the API is unavailable or the user denies permission.
+ */
+export async function detectLocalFonts(): Promise<FontOption[]> {
+  try {
+    // Check if the API exists
+    if (!('queryLocalFonts' in window)) {
+      return [];
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fonts: any[] = await (window as any).queryLocalFonts();
+
+    // Deduplicate by family name — the API returns one entry per style variant
+    const seenFamilies = new Set<string>();
+    // Also skip families we already have in SYSTEM_FONTS or GOOGLE_FONTS
+    const existingNames = new Set(
+      ALL_FONTS.map(f => f.name.toLowerCase())
+    );
+
+    const localFonts: FontOption[] = [];
+    for (const font of fonts) {
+      const family: string = font.family;
+      const key = family.toLowerCase();
+      if (seenFamilies.has(key) || existingNames.has(key)) continue;
+      seenFamilies.add(key);
+      localFonts.push({
+        name: family,
+        value: `"${family}"`,
+        category: 'local',
+      });
+    }
+
+    // Sort alphabetically
+    localFonts.sort((a, b) => a.name.localeCompare(b.name));
+    return localFonts;
+  } catch {
+    // User denied permission or API error — silently return empty
+    return [];
+  }
 }

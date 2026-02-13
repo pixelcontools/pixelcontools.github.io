@@ -21,8 +21,9 @@ function GridToggle() {
   }, [gridEnabled, gridDensity]);
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1" data-region="grid-toggle">
       <button
+        id="btn-toggle-grid"
         onClick={toggleGrid}
         className={`px-3 py-1 text-sm font-medium rounded transition-colors ${
           gridEnabled
@@ -30,6 +31,8 @@ function GridToggle() {
             : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
         }`}
         title="Toggle pixel grid (shows lines between pixels)"
+        aria-label={gridEnabled ? 'Disable pixel grid' : 'Enable pixel grid'}
+        aria-pressed={gridEnabled}
       >
         Grid
       </button>
@@ -38,6 +41,7 @@ function GridToggle() {
         <div className="flex items-center gap-1">
           <label className="text-xs text-gray-400">Density:</label>
           <input
+            id="input-grid-density"
             type="range"
             min="1"
             max="8"
@@ -45,6 +49,7 @@ function GridToggle() {
             onChange={(e) => setGridDensity(parseInt(e.target.value))}
             className="w-24 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer"
             title={`Grid density: every ${gridDensity} pixel(s)`}
+            aria-label="Grid density"
           />
           <span className="text-xs text-gray-400 w-6">{gridDensity}</span>
         </div>

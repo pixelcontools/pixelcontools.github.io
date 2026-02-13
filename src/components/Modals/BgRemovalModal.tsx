@@ -92,33 +92,39 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
   }, [imageDimensions, hasInitialFit]);
 
   return (
-    <DraggableModal isOpen={isOpen} title="BG Removal" onClose={onClose}>
+    <DraggableModal isOpen={isOpen} title="BG Removal" onClose={onClose} modalId="modal-bg-removal">
       <div className="flex flex-col h-full p-4 gap-4 text-gray-200">
         <div className="flex-1 flex flex-col min-h-0 gap-2">
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium">Preview</label>
             <div className="flex items-center gap-2">
               <button
+                id="btn-bgremoval-zoom-out"
                 onClick={() => setZoom((z) => Math.max(z - 0.25, 0.1))}
                 className="p-1 text-gray-400 hover:text-white transition-colors"
                 title="Zoom out"
+                aria-label="Zoom out"
               >
                 −
               </button>
               <span className="text-xs text-gray-400 min-w-[45px] text-center">{Math.round(zoom * 100)}%</span>
               <button
+                id="btn-bgremoval-zoom-in"
                 onClick={() => setZoom((z) => Math.min(z + 0.25, 3))}
                 className="p-1 text-gray-400 hover:text-white transition-colors"
                 title="Zoom in"
+                aria-label="Zoom in"
               >
                 +
               </button>
               <button
+                id="btn-bgremoval-zoom-reset"
                 onClick={() => {
                   if (imageDimensions) setZoom(calculateFitZoom(imageDimensions.width, imageDimensions.height));
                 }}
                 className="text-xs px-2 py-1 text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded transition-colors"
                 title="Reset zoom"
+                aria-label="Reset zoom"
               >
                 Reset
               </button>
@@ -158,16 +164,17 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
         <div className="flex flex-col gap-4 pt-4 border-t border-gray-700">
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <label htmlFor="tolerance-slider">Tolerance: {tolerance}</label>
+              <label htmlFor="input-bgremoval-tolerance">Tolerance: {tolerance}</label>
             </div>
             <input
-              id="tolerance-slider"
+              id="input-bgremoval-tolerance"
               type="range"
               min="0"
               max="255"
               value={tolerance}
               onChange={(e) => setTolerance(Number(e.target.value))}
               className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              aria-label="Background removal tolerance"
             />
             <p className="text-xs text-gray-400">Adjust color tolerance for background selection</p>
           </div>
@@ -175,26 +182,31 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <input
-                id="make-heatmap"
+                id="input-bgremoval-heatmap"
                 type="checkbox"
                 checked={makeHeatmap}
                 onChange={(e) => setMakeHeatmap(e.target.checked)}
                 className="w-4 h-4 rounded bg-gray-700 border-gray-600 accent-blue-500 cursor-pointer"
+                aria-label="Show heatmap"
               />
-              <label htmlFor="make-heatmap" className="text-sm text-gray-300 cursor-pointer">Show heatmap (red = kept pixels)</label>
+              <label htmlFor="input-bgremoval-heatmap" className="text-sm text-gray-300 cursor-pointer">Show heatmap (red = kept pixels)</label>
             </div>
 
             <div className="flex space-x-2">
               <button
+                id="btn-bgremoval-cancel"
                 onClick={onClose}
                 className="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded hover:bg-gray-600 transition-colors"
+                aria-label="Cancel background removal"
               >
                 Cancel
               </button>
               <button
+                id="btn-bgremoval-apply"
                 onClick={handleApply}
                 disabled={!previewImage || isProcessing}
                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                aria-label="Apply background removal"
               >
                 Apply
               </button>

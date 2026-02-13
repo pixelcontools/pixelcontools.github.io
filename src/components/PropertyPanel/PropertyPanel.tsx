@@ -27,8 +27,7 @@ function PropertyPanel() {
   const [isBgRemovalModalOpen, setIsBgRemovalModalOpen] = useState(false);
 
   return (
-    <div className="h-full flex flex-col bg-canvas-bg overflow-hidden">
-      {/* Header */}
+    <div className="h-full flex flex-col bg-canvas-bg overflow-hidden" data-region="property-panel">
       <div className="px-3 py-3 border-b border-border">
         <h2 className="text-sm font-semibold text-gray-300">Properties</h2>
       </div>
@@ -71,8 +70,11 @@ function PropertyPanel() {
               <div className="relative">
                 <div className="text-xs font-semibold text-gray-300 mb-2">Actions</div>
                 <button
+                  id="btn-modify-menu"
                   onClick={() => setIsModifyMenuOpen(!isModifyMenuOpen)}
                   className="w-full px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded transition-colors flex justify-between items-center"
+                  aria-label="Open modify menu"
+                  aria-expanded={isModifyMenuOpen}
                 >
                   <span>Modify...</span>
                   <span className="text-[10px]">▼</span>
@@ -81,38 +83,46 @@ function PropertyPanel() {
                 {isModifyMenuOpen && (
                   <div className="absolute left-0 top-full mt-1 w-full bg-panel-bg border border-border rounded shadow-lg z-20">
                     <button
+                      id="btn-open-transparency-modal"
                       onClick={() => {
                         setIsTransparencyModalOpen(true);
                         setIsModifyMenuOpen(false);
                       }}
                       className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-slate-700 hover:text-white"
+                      aria-label="Open transparency masking"
                     >
                       Transparency Masking
                     </button>
                     <button
+                      id="btn-open-pixelator-modal"
                       onClick={() => {
                         setIsPixelatorModalOpen(true);
                         setIsModifyMenuOpen(false);
                       }}
                       className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-slate-700 hover:text-white"
+                      aria-label="Open pixelator"
                     >
                       Pixelator
                     </button>
                     <button
+                      id="btn-open-crop-modal"
                       onClick={() => {
                         setIsCropModalOpen(true);
                         setIsModifyMenuOpen(false);
                       }}
                       className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-slate-700 hover:text-white"
+                      aria-label="Open crop tool"
                     >
                       Crop
                     </button>
                     <button
+                      id="btn-open-bg-removal-modal"
                       onClick={() => {
                         setIsBgRemovalModalOpen(true);
                         setIsModifyMenuOpen(false);
                       }}
                       className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-slate-700 hover:text-white"
+                      aria-label="Open background removal"
                     >
                       BG Removal (Experimental)
                     </button>
@@ -187,6 +197,7 @@ function BulkPositionControls() {
         <div>
           <label className="text-xs text-gray-400 block mb-1">Offset X</label>
           <input
+            id="input-bulk-offset-x"
             type="number"
             defaultValue={0}
             onKeyDown={(e) => {
@@ -198,12 +209,14 @@ function BulkPositionControls() {
             }}
             className="w-full px-2 py-1 bg-canvas-bg border border-border rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-400"
             placeholder="Pixels"
+            aria-label="Offset X pixels"
           />
         </div>
 
         <div>
           <label className="text-xs text-gray-400 block mb-1">Offset Y</label>
           <input
+            id="input-bulk-offset-y"
             type="number"
             defaultValue={0}
             onKeyDown={(e) => {
@@ -215,36 +228,45 @@ function BulkPositionControls() {
             }}
             className="w-full px-2 py-1 bg-canvas-bg border border-border rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-400"
             placeholder="Pixels"
+            aria-label="Offset Y pixels"
           />
         </div>
       </div>
 
       <div className="flex gap-1 text-xs">
         <button
+          id="btn-bulk-move-left"
           onClick={() => handleOffset(-1, 0)}
           className="flex-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
           title="Move left 1px (Shift+←)"
+          aria-label="Move left 1 pixel"
         >
           ←
         </button>
         <button
+          id="btn-bulk-move-right"
           onClick={() => handleOffset(1, 0)}
           className="flex-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
           title="Move right 1px (Shift+→)"
+          aria-label="Move right 1 pixel"
         >
           →
         </button>
         <button
+          id="btn-bulk-move-up"
           onClick={() => handleOffset(0, -1)}
           className="flex-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
           title="Move up 1px (Shift+↑)"
+          aria-label="Move up 1 pixel"
         >
           ↑
         </button>
         <button
+          id="btn-bulk-move-down"
           onClick={() => handleOffset(0, 1)}
           className="flex-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
           title="Move down 1px (Shift+↓)"
+          aria-label="Move down 1 pixel"
         >
           ↓
         </button>

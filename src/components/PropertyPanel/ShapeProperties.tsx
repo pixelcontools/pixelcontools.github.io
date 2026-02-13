@@ -141,16 +141,18 @@ function ShapeProperties({ layer }: ShapePropertiesProps) {
   const SHAPE_TYPES = ['rectangle', 'circle', 'triangle', 'hexagon', 'octagon', 'star'] as const;
 
   return (
-    <div className="bg-panel-bg rounded p-3 space-y-3">
+    <div className="bg-panel-bg rounded p-3 space-y-3" data-region="shape-properties">
       <div className="text-xs font-semibold text-gray-300">Shape Properties</div>
 
       {/* Shape Type */}
       <div>
         <label className="text-xs text-gray-400 block mb-1">Type</label>
         <select
+          id="select-shape-type"
           value={layer.shapeType}
           onChange={(e) => handleShapeTypeChange(e.target.value as typeof layer.shapeType)}
           className="w-full px-2 py-1 bg-canvas-bg border border-border rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+          aria-label="Shape type"
         >
           {SHAPE_TYPES.map((type) => (
             <option key={type} value={type}>
@@ -166,12 +168,14 @@ function ShapeProperties({ layer }: ShapePropertiesProps) {
           Size: {layer.shapeSize || 200}px
         </label>
         <input
+          id="input-shape-size"
           type="range"
           min="10"
           max="500"
           value={layer.shapeSize || 200}
           onChange={(e) => handleSizeChange(Number(e.target.value))}
           className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+          aria-label="Shape size"
         />
       </div>
 
@@ -181,6 +185,7 @@ function ShapeProperties({ layer }: ShapePropertiesProps) {
           Stretch X: {(layer.shapeStretchX || 1).toFixed(2)}x
         </label>
         <input
+          id="input-shape-stretch-x"
           type="range"
           min="0.1"
           max="20"
@@ -188,6 +193,7 @@ function ShapeProperties({ layer }: ShapePropertiesProps) {
           value={layer.shapeStretchX || 1}
           onChange={(e) => handleStretchXChange(Number(e.target.value))}
           className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+          aria-label="Shape stretch X"
         />
       </div>
 
@@ -197,6 +203,7 @@ function ShapeProperties({ layer }: ShapePropertiesProps) {
           Stretch Y: {(layer.shapeStretchY || 1).toFixed(2)}x
         </label>
         <input
+          id="input-shape-stretch-y"
           type="range"
           min="0.1"
           max="20"
@@ -204,6 +211,7 @@ function ShapeProperties({ layer }: ShapePropertiesProps) {
           value={layer.shapeStretchY || 1}
           onChange={(e) => handleStretchYChange(Number(e.target.value))}
           className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+          aria-label="Shape stretch Y"
         />
       </div>
 
@@ -212,12 +220,15 @@ function ShapeProperties({ layer }: ShapePropertiesProps) {
         <label className="text-xs text-gray-400 block mb-1">Color</label>
         <div className="flex gap-2">
           <input
+            id="input-shape-color"
             type="color"
             value={layer.shapeColor || '#FFFFFF'}
             onChange={(e) => handleColorChange(e.target.value)}
             className="w-12 h-8 rounded cursor-pointer border border-border"
+            aria-label="Shape color"
           />
           <input
+            id="input-shape-color-hex"
             type="text"
             value={layer.shapeColor || '#FFFFFF'}
             onChange={(e) => {
@@ -227,14 +238,17 @@ function ShapeProperties({ layer }: ShapePropertiesProps) {
             }}
             placeholder="#FFFFFF"
             className="flex-1 px-2 py-1 bg-canvas-bg border border-border rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+            aria-label="Shape color hex value"
           />
         </div>
       </div>
 
       {/* Edit Button */}
       <button
+        id="btn-edit-shape"
         onClick={() => (window as any).openShapeModal?.(layer)}
         className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded transition-colors"
+        aria-label="Edit shape in modal"
       >
         Edit Shape
       </button>

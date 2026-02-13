@@ -107,7 +107,7 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
   }, [imageDimensions, hasInitialFit]);
 
   return (
-    <DraggableModal isOpen={isOpen} title="Transparency Mask" onClose={onClose}>
+    <DraggableModal isOpen={isOpen} title="Transparency Mask" onClose={onClose} modalId="modal-transparency-mask">
       <div className="flex flex-col h-full p-4 gap-4 text-gray-200">
         {/* Preview Container with Zoom and Scroll */}
         <div className="flex-1 flex flex-col min-h-0 gap-2">
@@ -115,10 +115,12 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
             <label className="text-sm font-medium">Preview</label>
             <div className="flex items-center gap-2">
               <button
+                id="btn-tmask-zoom-out"
                 onClick={handleZoomOut}
                 disabled={zoom <= 0.1}
                 className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 title="Zoom out"
+                aria-label="Zoom out"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
@@ -128,19 +130,23 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
                 {Math.round(zoom * 100)}%
               </span>
               <button
+                id="btn-tmask-zoom-in"
                 onClick={handleZoomIn}
                 disabled={zoom >= 3}
                 className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 title="Zoom in"
+                aria-label="Zoom in"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
                 </svg>
               </button>
               <button
+                id="btn-tmask-zoom-reset"
                 onClick={handleResetZoom}
                 className="text-xs px-2 py-1 text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded transition-colors"
                 title="Reset zoom"
+                aria-label="Reset zoom"
               >
                 Reset
               </button>
@@ -186,16 +192,17 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
         <div className="flex flex-col gap-4 pt-4 border-t border-gray-700">
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <label htmlFor="threshold-slider">Mask Threshold: {threshold}</label>
+              <label htmlFor="input-tmask-threshold">Mask Threshold: {threshold}</label>
             </div>
             <input
-              id="threshold-slider"
+              id="input-tmask-threshold"
               type="range"
               min="0"
               max="255"
               value={threshold}
               onChange={(e) => setThreshold(Number(e.target.value))}
               className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              aria-label="Mask threshold"
             />
             <p className="text-xs text-gray-400">
               0=Opaque, 255=Transparent
@@ -205,28 +212,33 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <input
-                id="use-template-colors"
+                id="input-tmask-template-colors"
                 type="checkbox"
                 checked={useTemplatePalette}
                 onChange={(e) => setUseTemplatePalette(e.target.checked)}
                 className="w-4 h-4 rounded bg-gray-700 border-gray-600 accent-blue-500 cursor-pointer"
+                aria-label="Use template colors"
               />
-              <label htmlFor="use-template-colors" className="text-sm text-gray-300 cursor-pointer">
+              <label htmlFor="input-tmask-template-colors" className="text-sm text-gray-300 cursor-pointer">
                 Use template colors
               </label>
             </div>
 
             <div className="flex space-x-2">
               <button
+                id="btn-tmask-cancel"
                 onClick={onClose}
                 className="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded hover:bg-gray-600 transition-colors"
+                aria-label="Cancel transparency mask"
               >
                 Cancel
               </button>
               <button
+                id="btn-tmask-apply"
                 onClick={handleApply}
                 disabled={!previewImage || isProcessing}
                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                aria-label="Apply transparency mask"
               >
                 Apply
               </button>

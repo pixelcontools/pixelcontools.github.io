@@ -233,39 +233,47 @@ const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
 
   // render
   return (
-    <DraggableModal isOpen={isOpen} title="Crop" onClose={onClose}>
+    <DraggableModal isOpen={isOpen} title="Crop" onClose={onClose} modalId="modal-crop">
       <div className="flex flex-col h-full p-4 gap-4 text-gray-200">
         <div className="flex items-center justify-between">
           <label className="text-sm font-medium">Preview</label>
           <div className="flex items-center gap-2">
             <button
+              id="btn-crop-zoom-out"
               onClick={handleZoomOut}
               disabled={zoom <= 0.1}
               className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               title="Zoom out"
+              aria-label="Zoom out"
             >
               −
             </button>
             <span className="text-xs text-gray-400 min-w-[45px] text-center">{Math.round(zoom * 100)}%</span>
             <button
+              id="btn-crop-zoom-in"
               onClick={handleZoomIn}
               disabled={zoom >= 5}
               className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               title="Zoom in"
+              aria-label="Zoom in"
             >
               +
             </button>
             <button
+              id="btn-crop-zoom-reset"
               onClick={handleResetZoom}
               className="text-xs px-2 py-1 text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded transition-colors"
               title="Reset zoom"
+              aria-label="Reset zoom"
             >
               Reset
             </button>
             <button
+              id="btn-crop-auto"
               onClick={findTransparentBounds}
               className="text-xs px-2 py-1 text-cyan-200 bg-cyan-900 hover:bg-cyan-800 rounded transition-colors"
               title="Auto-crop to remove transparent edges"
+              aria-label="Auto-crop transparent edges"
             >
               Auto
             </button>
@@ -363,15 +371,19 @@ const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
 
         <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-700">
           <button
+            id="btn-crop-cancel"
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded hover:bg-gray-600 transition-colors"
+            aria-label="Cancel crop"
           >
             Cancel
           </button>
           <button
+            id="btn-crop-apply"
             onClick={applyCrop}
             disabled={!cropRect}
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            aria-label="Apply crop"
           >
             Apply
           </button>

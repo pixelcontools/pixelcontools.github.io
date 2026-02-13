@@ -190,12 +190,16 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
   return (
     <div
       ref={elementRef}
+      id={`layer-item-${layer.id}`}
       onClick={handleSelectLayer}
       onMouseDown={handleMouseDown}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onMouseUp={handleMouseUp}
       title="Click to select • Ctrl/Cmd+Click for multi-select • Shift+Click for range select"
+      aria-label={`Layer: ${layer.name}`}
+      aria-selected={isSelected}
+      role="option"
       className={`group p-2 rounded border transition-all cursor-pointer select-none ${
         isDragOver ? 'bg-green-900 border-green-400 scale-105' : ''
       } ${
@@ -208,6 +212,7 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
       <div className="flex items-center gap-2 mb-1">
         {/* Selection Checkbox - Custom Styled */}
         <button
+          id={`btn-layer-select-${layer.id}`}
           onClick={handleCheckboxChange}
           onMouseDown={(e) => e.stopPropagation()}
           className={`w-4 h-4 flex-shrink-0 rounded border-2 flex items-center justify-center transition-colors ${
@@ -216,6 +221,7 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
               : 'bg-gray-700 border-gray-600 hover:border-gray-500'
           }`}
           title="Select/deselect this layer"
+          aria-label={isSelected ? `Deselect ${layer.name}` : `Select ${layer.name}`}
         >
           {isSelected && (
             <svg className="w-3 h-3 text-black" fill="currentColor" viewBox="0 0 20 20">
@@ -244,6 +250,7 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
         <div className="flex-1 min-w-0">
           {isEditingName ? (
             <input
+              id={`input-layer-name-${layer.id}`}
               autoFocus
               type="text"
               value={tempName}
@@ -253,6 +260,7 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
               onClick={(e) => e.stopPropagation()}
               className="w-full px-1 py-0 bg-canvas-bg border border-blue-400 rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-300"
               placeholder="Layer name..."
+              aria-label="Layer name"
             />
           ) : (
             <span className="text-xs font-medium truncate block" title={layer.name}>
@@ -264,6 +272,7 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
         {/* Rename Button */}
         {!isEditingName && (
           <button
+            id={`btn-layer-rename-${layer.id}`}
             onClick={(e) => {
               e.stopPropagation();
               setTempName(layer.name);
@@ -271,6 +280,7 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
             }}
             className="w-4 h-4 flex items-center justify-center flex-shrink-0 rounded transition-colors hover:bg-gray-600 opacity-0 group-hover:opacity-100"
             title="Rename layer"
+            aria-label={`Rename ${layer.name}`}
           >
             <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
               <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
@@ -280,9 +290,11 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
 
         {/* Visibility Toggle */}
         <button
+          id={`btn-layer-visibility-${layer.id}`}
           onClick={handleToggleVisibility}
           className="w-5 h-5 flex items-center justify-center flex-shrink-0 rounded transition-colors hover:bg-gray-600"
           title={layer.visible ? 'Hide layer' : 'Show layer'}
+          aria-label={layer.visible ? `Hide ${layer.name}` : `Show ${layer.name}`}
         >
           {layer.visible ? (
             <svg className="w-4 h-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
@@ -298,9 +310,11 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
 
         {/* Lock Toggle */}
         <button
+          id={`btn-layer-lock-${layer.id}`}
           onClick={handleToggleLock}
           className="w-5 h-5 flex items-center justify-center flex-shrink-0 rounded transition-colors hover:bg-gray-600"
           title={layer.locked ? 'Unlock layer' : 'Lock layer'}
+          aria-label={layer.locked ? `Unlock ${layer.name}` : `Lock ${layer.name}`}
         >
           {layer.locked ? (
             <svg className="w-4 h-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
@@ -324,12 +338,14 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
         {/* Edit Text Button (only for text layers) */}
         {isTextLayer(layer) && (
           <button
+            id={`btn-layer-edit-text-${layer.id}`}
             onClick={(e) => {
               e.stopPropagation();
               (window as any).openTextLayerModal?.(layer);
             }}
             className="flex-1 px-1 py-1 text-xs bg-blue-700 hover:bg-blue-600 rounded transition-colors flex items-center justify-center"
             title="Edit text"
+            aria-label={`Edit text for ${layer.name}`}
           >
             <span className="font-bold text-sm">T</span>
           </button>
@@ -338,38 +354,46 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
         {/* Edit Shape Button (only for shape layers) */}
         {isShapeLayer(layer) && (
           <button
+            id={`btn-layer-edit-shape-${layer.id}`}
             onClick={(e) => {
               e.stopPropagation();
               (window as any).openShapeModal?.(layer);
             }}
             className="flex-1 px-1 py-1 text-xs bg-purple-700 hover:bg-purple-600 rounded transition-colors flex items-center justify-center"
             title="Edit shape"
+            aria-label={`Edit shape for ${layer.name}`}
           >
             ◆
           </button>
         )}
         <button
+          id={`btn-layer-bring-front-${layer.id}`}
           onClick={handleBringToFront}
           className="flex-1 px-1 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors flex items-center justify-center"
           title="Bring to front"
+          aria-label={`Bring ${layer.name} to front`}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 20 20">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11l5-5m0 0l5 5m-5-5v12" />
           </svg>
         </button>
         <button
+          id={`btn-layer-send-back-${layer.id}`}
           onClick={handleSendToBack}
           className="flex-1 px-1 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors flex items-center justify-center"
           title="Send to back"
+          aria-label={`Send ${layer.name} to back`}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 20 20">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 9l-5 5m0 0l-5-5m5 5V2" />
           </svg>
         </button>
         <button
+          id={`btn-layer-duplicate-${layer.id}`}
           onClick={handleDuplicateLayer}
           className="flex-1 px-1 py-1 text-xs bg-blue-700 hover:bg-blue-600 rounded transition-colors flex items-center justify-center"
           title="Duplicate layer"
+          aria-label={`Duplicate ${layer.name}`}
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path d="M4 4a2 2 0 012-2h6a2 2 0 012 2v12a1 1 0 110 2h-6a2 2 0 01-2-2V4z" />
@@ -377,9 +401,11 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
           </svg>
         </button>
         <button
+          id={`btn-layer-remove-${layer.id}`}
           onClick={handleRemoveLayer}
           className="flex-1 px-1 py-1 text-xs bg-red-700 hover:bg-red-600 rounded transition-colors flex items-center justify-center"
           title="Remove layer"
+          aria-label={`Remove ${layer.name}`}
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />

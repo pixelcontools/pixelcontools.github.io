@@ -22,8 +22,9 @@ function HistoryControls() {
   };
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1" data-region="history-controls">
       <button
+        id="btn-undo"
         onClick={handleUndo}
         disabled={!canUndo}
         className={`px-3 py-1 text-sm font-medium rounded transition-colors ${
@@ -32,11 +33,13 @@ function HistoryControls() {
             : 'text-gray-600 bg-panel-bg cursor-not-allowed opacity-50'
         }`}
         title={`Undo (${history.past.length} operation${history.past.length !== 1 ? 's' : ''} available) - Ctrl+Z`}
+        aria-label="Undo"
       >
         ↶
       </button>
 
       <button
+        id="btn-redo"
         onClick={handleRedo}
         disabled={!canRedo}
         className={`px-3 py-1 text-sm font-medium rounded transition-colors ${
@@ -45,6 +48,7 @@ function HistoryControls() {
             : 'text-gray-600 bg-panel-bg cursor-not-allowed opacity-50'
         }`}
         title={`Redo (${history.future.length} operation${history.future.length !== 1 ? 's' : ''} available) - Ctrl+Shift+Z`}
+        aria-label="Redo"
       >
         ↷
       </button>

@@ -1,50 +1,78 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import useCompositorStore from '../store/compositorStore';
+
+const ZOOM_LEVELS = [25, 33, 50, 66, 75, 100, 125, 150, 200, 400, 800, 1600, 3200];
+
+/**
+ * Calculate the best zoom level to fit the canvas in the container
+ */
+function calculateFitZoom(canvasWidth: number, canvasHeight: number): number {
+  const container = document.querySelector('[data-region="canvas"]');
+  if (!container) return 100;
+
+  const containerWidth = container.clientWidth;
+  const containerHeight = container.clientHeight;
+
+  if (containerWidth <= 0 || containerHeight <= 0 || canvasWidth <= 0 || canvasHeight <= 0) {
+    return 100;
+  }
+
+  const scaleX = containerWidth / canvasWidth;
+  const scaleY = containerHeight / canvasHeight;
+
+  const fitZoom = Math.min(scaleX, scaleY) * 100;
+  const nearestZoom = ZOOM_LEVELS.reduce((prev, curr) =>
+    Math.abs(curr - fitZoom) < Math.abs(prev - fitZoom) ? curr : prev
+  );
+
+  // Go one level smaller for breathing room
+  const nearestIndex = ZOOM_LEVELS.indexOf(nearestZoom);
+  return nearestIndex > 0 ? ZOOM_LEVELS[nearestIndex - 1] : nearestZoom;
+}
 
 /**
  * Hook that automatically resets zoom to fit canvas when the first layer is added
- * to an empty canvas
+ * to an empty canvas. Also auto-crops canvas to layers on first layer add.
+ * Exposes window.fitCanvasToScreen() for other components.
  */
 export function useAutoResetZoom() {
   const layers = useCompositorStore((state) => state.project.layers);
-  const canvas = useCompositorStore((state) => state.project.canvas);
-  const setViewport = useCompositorStore((state) => state.setViewport);
+  const cropCanvasToLayers = useCompositorStore((state) => state.cropCanvasToLayers);
   const hadLayersRef = useRef(false);
-  const ZOOM_LEVELS = [25, 33, 50, 66, 100, 150, 200, 400, 800, 1600, 3200];
+
+  // Fit-to-screen function that reads latest state
+  const fitCanvasToScreen = useCallback(() => {
+    // Defer to let DOM/state settle
+    setTimeout(() => {
+      const state = useCompositorStore.getState();
+      const fitZoom = calculateFitZoom(state.project.canvas.width, state.project.canvas.height);
+      state.setViewport({ zoom: fitZoom, panX: 0, panY: 0 });
+    }, 50);
+  }, []);
+
+  // Expose globally so CanvasSettings (and others) can invoke after crop
+  useEffect(() => {
+    (window as any).fitCanvasToScreen = fitCanvasToScreen;
+    return () => { delete (window as any).fitCanvasToScreen; };
+  }, [fitCanvasToScreen]);
 
   useEffect(() => {
     const hasLayers = layers.length > 0;
 
-    // Trigger zoom reset when transitioning from no layers to having layers
+    // Trigger crop + zoom reset when transitioning from no layers to having layers
     if (hasLayers && !hadLayersRef.current) {
       hadLayersRef.current = true;
 
-      // Defer to next frame to ensure DOM is ready
+      // First crop the canvas to fit the layers, then fit-to-screen
       const timer = setTimeout(() => {
-        const container = document.querySelector('[data-canvas-container="true"]');
-        if (!container) return;
+        cropCanvasToLayers();
 
-        const containerWidth = container.clientWidth;
-        const containerHeight = container.clientHeight;
-
-        if (containerWidth <= 0 || containerHeight <= 0 || canvas.width <= 0 || canvas.height <= 0) {
-          return;
-        }
-
-        const scaleX = containerWidth / canvas.width;
-        const scaleY = containerHeight / canvas.height;
-
-        const fitZoom = Math.min(scaleX, scaleY) * 100;
-        // Snap to a preset zoom level, then go one level smaller for better visibility
-        const nearestZoom = ZOOM_LEVELS.reduce((prev, curr) =>
-          Math.abs(curr - fitZoom) < Math.abs(prev - fitZoom) ? curr : prev
-        );
-        
-        // Find the index of nearest zoom and go one level smaller for better visibility
-        const nearestIndex = ZOOM_LEVELS.indexOf(nearestZoom);
-        const resetZoom = nearestIndex > 0 ? ZOOM_LEVELS[nearestIndex - 1] : nearestZoom;
-
-        setViewport({ zoom: resetZoom, panX: 0, panY: 0 });
+        // After crop state settles, fit zoom
+        setTimeout(() => {
+          const state = useCompositorStore.getState();
+          const fitZoom = calculateFitZoom(state.project.canvas.width, state.project.canvas.height);
+          state.setViewport({ zoom: fitZoom, panX: 0, panY: 0 });
+        }, 50);
       }, 50);
 
       return () => clearTimeout(timer);
@@ -54,5 +82,5 @@ export function useAutoResetZoom() {
     if (!hasLayers) {
       hadLayersRef.current = false;
     }
-  }, [layers.length, canvas.width, canvas.height, setViewport]);
+  }, [layers.length, cropCanvasToLayers]);
 }

@@ -13,6 +13,7 @@ import useDebugMenu from './hooks/useDebugMenu';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useAutoResetZoom } from './hooks/useAutoResetZoom';
 import { useInitializePreferences } from './hooks/useLocalStorage';
+import { usePortraitMode } from './hooks/usePortraitMode';
 import { Layer } from './types/compositor.types';
 
 /**
@@ -30,6 +31,11 @@ function App() {
   // Shape layer modal state
   const [isShapeModalOpen, setIsShapeModalOpen] = useState(false);
   const [editingShapeLayer, setEditingShapeLayer] = useState<Layer | undefined>(undefined);
+
+  // Portrait/mobile layout
+  const isPortrait = usePortraitMode();
+  const [showLayersDrawer, setShowLayersDrawer] = useState(false);
+  const [showPropertiesDrawer, setShowPropertiesDrawer] = useState(false);
 
   // Initialize preferences from localStorage
   useInitializePreferences();
@@ -115,21 +121,80 @@ function App() {
       <Toolbar />
 
       {/* Main Content Area */}
-      <div className="flex flex-1 gap-0 overflow-hidden">
-        {/* Left Panel - Layer Management */}
-        <div className="w-64 border-r border-border overflow-hidden flex flex-col">
-          <LayerPanel />
-        </div>
+      <div className="flex flex-1 gap-0 overflow-hidden relative">
+        {isPortrait ? (
+          <>
+            {/* Portrait: Canvas fills full width, panels are overlay drawers */}
+            <div className="flex-1 overflow-hidden">
+              <Canvas />
+            </div>
 
-        {/* Center - Canvas */}
-        <div className="flex-1 overflow-hidden">
-          <Canvas />
-        </div>
+            {/* Hamburger buttons - bottom corners */}
+            <button
+              onClick={() => { setShowLayersDrawer(!showLayersDrawer); setShowPropertiesDrawer(false); }}
+              className={`fixed bottom-4 left-4 z-[200] w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-lg transition-colors ${
+                showLayersDrawer ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+              }`}
+              aria-label={showLayersDrawer ? 'Close layers panel' : 'Open layers panel'}
+            >
+              ☰
+            </button>
+            <button
+              onClick={() => { setShowPropertiesDrawer(!showPropertiesDrawer); setShowLayersDrawer(false); }}
+              className={`fixed bottom-4 right-4 z-[200] w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-lg transition-colors ${
+                showPropertiesDrawer ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+              }`}
+              aria-label={showPropertiesDrawer ? 'Close properties panel' : 'Open properties panel'}
+            >
+              ⚙
+            </button>
 
-        {/* Right Panel - Properties */}
-        <div className="w-64 border-l border-border overflow-hidden flex flex-col">
-          <PropertyPanel />
-        </div>
+            {/* Layers Drawer Overlay */}
+            {showLayersDrawer && (
+              <>
+                <div className="fixed inset-0 bg-black/50 z-[150]" onClick={() => setShowLayersDrawer(false)} />
+                <div className="fixed top-16 left-0 bottom-0 w-72 bg-panel-bg border-r border-border z-[160] overflow-hidden flex flex-col animate-slide-in-left shadow-2xl">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+                    <span className="text-sm font-semibold text-gray-300">Layers</span>
+                    <button onClick={() => setShowLayersDrawer(false)} className="text-gray-400 hover:text-white text-lg px-1">✕</button>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <LayerPanel />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Properties Drawer Overlay */}
+            {showPropertiesDrawer && (
+              <>
+                <div className="fixed inset-0 bg-black/50 z-[150]" onClick={() => setShowPropertiesDrawer(false)} />
+                <div className="fixed top-16 right-0 bottom-0 w-72 bg-panel-bg border-l border-border z-[160] overflow-hidden flex flex-col animate-slide-in-right shadow-2xl">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+                    <span className="text-sm font-semibold text-gray-300">Properties</span>
+                    <button onClick={() => setShowPropertiesDrawer(false)} className="text-gray-400 hover:text-white text-lg px-1">✕</button>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <PropertyPanel />
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Landscape: Normal three-column layout */}
+            <div className="w-64 border-r border-border overflow-hidden flex flex-col">
+              <LayerPanel />
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <Canvas />
+            </div>
+            <div className="w-64 border-l border-border overflow-hidden flex flex-col">
+              <PropertyPanel />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Debug History Modal (Ctrl+Shift+D) */}

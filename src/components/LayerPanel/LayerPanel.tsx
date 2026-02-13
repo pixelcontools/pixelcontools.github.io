@@ -108,7 +108,7 @@ function LayerPanel() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-canvas-bg">
+    <div className="h-full flex flex-col bg-canvas-bg" data-region="layer-panel">
       {/* Header */}
       <div className="px-3 py-3 border-b border-border">
         <h2 className="text-sm font-semibold text-gray-300 mb-3">Layers</h2>
@@ -116,52 +116,64 @@ function LayerPanel() {
         {/* Layer Panel Controls */}
         <div className="flex gap-1 flex-wrap">
           <button
+            id="btn-select-all-layers"
             onClick={selectAllLayers}
             disabled={project.layers.length === 0}
             className="flex-1 min-w-16 px-2 py-1 text-xs font-medium text-gray-400 hover:text-gray-300 bg-panel-bg hover:bg-gray-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Select all layers (Ctrl+A)"
+            aria-label="Select all layers"
           >
             All
           </button>
 
           <button
+            id="btn-deselect-all-layers"
             onClick={deselectAllLayers}
             disabled={selectedLayerIds.length === 0}
             className="flex-1 min-w-16 px-2 py-1 text-xs font-medium text-gray-400 hover:text-gray-300 bg-panel-bg hover:bg-gray-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Deselect all layers (Ctrl+D)"
+            aria-label="Deselect all layers"
           >
             None
           </button>
 
           <button
+            id="btn-delete-selected-layers"
             onClick={handleDeleteSelected}
             disabled={selectedLayerIds.length === 0}
             className="flex-1 min-w-16 px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 bg-panel-bg hover:bg-red-900 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Delete selected layers (Delete)"
+            aria-label="Delete selected layers"
           >
             Delete
           </button>
 
           <button
+            id="btn-create-text-layer"
             onClick={() => (window as any).openTextLayerModal?.()}
             className="flex-1 min-w-16 px-2 py-1 text-xs font-medium text-blue-400 hover:text-blue-300 bg-panel-bg hover:bg-blue-900 rounded transition-colors flex items-center justify-center gap-1"
             title="Create text layer"
+            aria-label="Create text layer"
           >
             <span className="font-bold">T</span>
           </button>
 
           <button
+            id="btn-create-shape-layer"
             onClick={() => (window as any).openShapeModal?.()}
             className="flex-1 min-w-16 px-2 py-1 text-xs font-medium text-purple-400 hover:text-purple-300 bg-panel-bg hover:bg-purple-900 rounded transition-colors"
             title="Create shape layer"
+            aria-label="Create shape layer"
           >
             ◆
           </button>
 
           <button
+            id="btn-upload-images"
             onClick={() => fileInputRef.current?.click()}
             className="flex-1 min-w-16 px-2 py-1 text-xs font-medium text-green-400 hover:text-green-300 bg-panel-bg hover:bg-green-900 rounded transition-colors"
             title="Upload additional images"
+            aria-label="Upload additional images"
           >
             Add
           </button>
@@ -204,11 +216,13 @@ function LayerPanel() {
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
+        id="input-upload-images"
         type="file"
         multiple
         accept="image/png,image/gif,image/bmp,image/jpeg"
         onChange={handleImageUpload}
         className="hidden"
+        aria-label="Upload images"
       />
     </div>
   );

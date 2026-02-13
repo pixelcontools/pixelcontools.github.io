@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import DraggableModal from './DraggableModal';
+import EyedropperModal from './EyedropperModal';
+import { usePortraitMode } from '../../hooks/usePortraitMode';
 import useCompositorStore from '../../store/compositorStore';
 import { Layer } from '../../types/compositor.types';
 import PixelatorWorker from '../../workers/pixelator.worker?worker';
@@ -40,6 +42,7 @@ const COMMON_HEIGHTS = [
 
 const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer }) => {
   const updateLayer = useCompositorStore((state) => state.updateLayer);
+  const isPortrait = usePortraitMode();
 
   // State
   const [targetHeight, setTargetHeight] = useState<number>(128);
@@ -79,6 +82,9 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const [brightness, setBrightness] = useState<number>(0);
   const [contrast, setContrast] = useState<number>(0);
   const [saturation, setSaturation] = useState<number>(0);
+
+  // Eyedropper modal state
+  const [isEyedropperOpen, setIsEyedropperOpen] = useState<boolean>(false);
 
   const workerRef = useRef<Worker | null>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -508,11 +514,43 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     }
   };
 
+  // Eyedropper: add picked colors to custom palette text field
+  const handleEyedropperColors = (colors: string[]) => {
+    if (colors.length === 0) return;
+    const newColors = colors.join(', ');
+    const existing = customPaletteInput.trim();
+    if (existing === '') {
+      setCustomPaletteInput(newColors);
+    } else {
+      setCustomPaletteInput(`${existing}, ${newColors}`);
+    }
+    // Auto-switch to custom or geopixels+custom if not already
+    if (paletteMode !== 'custom' && paletteMode !== 'geopixels+custom') {
+      debounceTimeRef.current = 100;
+      setPaletteMode('geopixels+custom');
+    }
+  };
+
+  // K-Means: Send generated palette colors to Geopixels+Custom text field
+  const handleSendKmeansToCustom = () => {
+    if (generatedPalette.length === 0) return;
+    const newColors = generatedPalette.join(', ');
+    const existing = customPaletteInput.trim();
+    if (existing === '') {
+      setCustomPaletteInput(newColors);
+    } else {
+      setCustomPaletteInput(`${existing}, ${newColors}`);
+    }
+    // Switch to Geopixels + Custom mode
+    debounceTimeRef.current = 100;
+    setPaletteMode('geopixels+custom');
+  };
+
   return (
-    <DraggableModal isOpen={isOpen} title="Pixelator" onClose={onClose} noPadding={true} children={() => (
-      <div className="flex text-gray-200 h-full w-full overflow-hidden">
-        {/* Left: Controls */}
-        <div className="w-72 border-r border-gray-700 flex-shrink-0 flex flex-col overflow-hidden">
+    <DraggableModal isOpen={isOpen} title="Pixelator" onClose={onClose} noPadding={true} modalId="modal-pixelator" children={() => (
+      <div className={`${isPortrait ? 'flex flex-col-reverse' : 'flex'} text-gray-200 h-full w-full overflow-hidden`}>
+        {/* Controls */}
+        <div className={`${isPortrait ? 'border-t max-h-[45vh]' : 'w-72 border-r'} border-gray-700 flex-shrink-0 flex flex-col overflow-hidden`}>
           {/* Scrollable content area */}
           <div className="overflow-y-auto flex-1 p-4 space-y-6 text-gray-200">
 
@@ -659,12 +697,22 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
               </div>
 
               {(paletteMode === 'custom' || paletteMode === 'geopixels+custom') && (
-                <textarea
-                  value={customPaletteInput}
-                  onChange={(e) => setCustomPaletteInput(e.target.value)}
-                  placeholder="#FFFFFF, #000000 or 16777215, 0"
-                  className="w-full h-24 bg-gray-800 border border-gray-600 rounded p-2 text-xs font-mono"
-                />
+                <div className="space-y-2">
+                  <textarea
+                    value={customPaletteInput}
+                    onChange={(e) => setCustomPaletteInput(e.target.value)}
+                    placeholder="#FFFFFF, #000000 or 16777215, 0"
+                    className="w-full h-24 bg-gray-800 border border-gray-600 rounded p-2 text-xs font-mono"
+                  />
+                  <button
+                    onClick={() => setIsEyedropperOpen(true)}
+                    className="w-full px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-medium rounded transition-colors flex items-center justify-center gap-2"
+                    title="Pick colors from the original image"
+                  >
+                    <span>🎯</span>
+                    <span>Eyedropper — Pick from Image</span>
+                  </button>
+                </div>
               )}
 
               {/* Palette Visualization */}
@@ -889,6 +937,16 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                     className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
                   />
                   <p className="text-xs text-gray-500 mt-1">Reduces image to N dominant colors before applying palette/dithering.</p>
+
+                  {generatedPalette.length > 0 && (
+                    <button
+                      onClick={handleSendKmeansToCustom}
+                      className="w-full mt-2 px-3 py-1.5 bg-teal-700 hover:bg-teal-600 text-white text-xs font-medium rounded transition-colors"
+                      title="Send K-Means palette to Geopixels Base + Custom"
+                    >
+                      Send Colors to Geopixels Custom Palette
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1118,6 +1176,14 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
             </button>
           </div>
         </div>
+
+        {/* Eyedropper Modal */}
+        <EyedropperModal
+          isOpen={isEyedropperOpen}
+          onClose={() => setIsEyedropperOpen(false)}
+          imageDataUrl={layer.imageData}
+          onAddColors={handleEyedropperColors}
+        />
       </div>
     )} />
   );
