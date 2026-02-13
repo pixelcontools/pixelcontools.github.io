@@ -704,14 +704,20 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                     placeholder="#FFFFFF, #000000 or 16777215, 0"
                     className="w-full h-24 bg-gray-800 border border-gray-600 rounded p-2 text-xs font-mono"
                   />
-                  <button
-                    onClick={() => setIsEyedropperOpen(true)}
-                    className="w-full px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-medium rounded transition-colors flex items-center justify-center gap-2"
-                    title="Pick colors from the original image"
-                  >
-                    <span>🎯</span>
-                    <span>Eyedropper — Pick from Image</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsEyedropperOpen(true)}
+                      className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium rounded transition-colors"
+                    >
+                      Eyedropper
+                    </button>
+                    <div className="group relative">
+                      <span className="cursor-help text-xs text-blue-400">?</span>
+                      <div className="absolute bottom-full right-0 mb-2 w-52 p-2 bg-gray-900 border border-gray-600 rounded shadow-xl text-xs text-gray-300 hidden group-hover:block z-50">
+                        Select colors to use from template image
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
