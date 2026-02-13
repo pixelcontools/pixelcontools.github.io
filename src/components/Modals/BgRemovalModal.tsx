@@ -216,6 +216,7 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lastBrushPosRef = useRef<{ x: number; y: number } | null>(null);
   const hasInitialFitRef = useRef(false);
+  const [brushCursorPos, setBrushCursorPos] = useState<{x: number, y: number} | null>(null);
 
   // ─── Init when modal opens ────────────────────────────────────────────
   useEffect(() => {
@@ -609,7 +610,7 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
   const getCursorClass = () => {
     if (isPanning) return 'cursor-grabbing';
     if (mode === 'click') return 'cursor-crosshair';
-    if (mode === 'brush') return 'cursor-crosshair';
+    if (mode === 'brush') return 'cursor-none';
     return 'cursor-default';
   };
 
@@ -670,12 +671,21 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
           {/* Preview container with pan & zoom */}
           <div
             ref={containerRef}
-            className="w-full h-full overflow-hidden bg-gray-900"
+            className="w-full h-full overflow-hidden bg-gray-900 relative"
             onWheel={handleWheel}
             onMouseDown={handlePanStart}
-            onMouseMove={handlePanMove}
+            onMouseMove={(e) => {
+              handlePanMove(e);
+              if (mode === 'brush' && containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                setBrushCursorPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+              }
+            }}
             onMouseUp={handlePanEnd}
-            onMouseLeave={handlePanEnd}
+            onMouseLeave={() => {
+              handlePanEnd();
+              setBrushCursorPos(null);
+            }}
             onContextMenu={e => e.preventDefault()}
           >
             <div
@@ -697,6 +707,24 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
                 style={{ display: 'block', imageRendering: zoom > 2 ? 'pixelated' : 'auto' }}
               />
             </div>
+            {/* Brush size cursor overlay */}
+            {mode === 'brush' && brushCursorPos && !isPanning && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: brushCursorPos.x - (brushSize * zoom) / 2,
+                  top: brushCursorPos.y - (brushSize * zoom) / 2,
+                  width: brushSize * zoom,
+                  height: brushSize * zoom,
+                  border: '1.5px solid rgba(255, 255, 255, 0.8)',
+                  borderRadius: '50%',
+                  pointerEvents: 'none',
+                  zIndex: 10,
+                  boxShadow: '0 0 0 1px rgba(0, 0, 0, 0.5)',
+                  transition: 'width 0.05s, height 0.05s, left 0.05s, top 0.05s',
+                }}
+              />
+            )}
           </div>
         </div>
 
