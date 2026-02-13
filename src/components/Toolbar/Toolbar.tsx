@@ -11,7 +11,7 @@ import { usePortraitMode } from '../../hooks/usePortraitMode';
  * Top toolbar component
  * Contains project name, file operations, zoom controls
  */
-function Toolbar() {
+function Toolbar({ onHelpClick }: { onHelpClick?: () => void }) {
   const project = useCompositorStore((state) => state.project);
   const setProjectName = useCompositorStore((state) => state.setProjectName);
   const showSelectionBorders = useCompositorStore((state) => state.ui.showSelectionBorders);
@@ -150,6 +150,19 @@ function Toolbar() {
           <FileOperations />
           <div className="w-px h-6 bg-border"></div>
           <HistoryControls />
+          {onHelpClick && (
+            <>
+              <div className="w-px h-6 bg-border"></div>
+              <button
+                onClick={onHelpClick}
+                className="px-2 py-1 rounded text-sm font-bold text-blue-400 hover:text-white hover:bg-gray-700 transition-colors"
+                title="Open tutorial"
+                aria-label="Open tutorial"
+              >
+                ?
+              </button>
+            </>
+          )}
         </div>
 
         {/* Desktop: Grid/Borders/Tools + Zoom all on row 1 */}

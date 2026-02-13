@@ -15,6 +15,7 @@ import { useAutoResetZoom } from './hooks/useAutoResetZoom';
 import { useInitializePreferences } from './hooks/useLocalStorage';
 import { usePortraitMode } from './hooks/usePortraitMode';
 import { Layer } from './types/compositor.types';
+import TutorialOverlay, { useTutorialFirstVisit } from './components/Tutorial/TutorialOverlay';
 
 /**
  * Main application component
@@ -34,6 +35,7 @@ function App() {
 
   // Portrait/mobile layout
   const isPortrait = usePortraitMode();
+  const { showTutorial, setShowTutorial, isFirstVisit } = useTutorialFirstVisit();
   const [showLayersDrawer, setShowLayersDrawer] = useState(false);
   const [showPropertiesDrawer, setShowPropertiesDrawer] = useState(false);
 
@@ -48,6 +50,51 @@ function App() {
 
   // Initialize auto-save
   useAutoSave();
+
+  // Load sample image on first visit
+  const addLayer = useCompositorStore((state) => state.addLayer);
+  const selectLayer = useCompositorStore((state) => state.selectLayer);
+  useEffect(() => {
+    if (!isFirstVisit) return;
+    // Small delay to let auto-save attempt finish first
+    const timer = setTimeout(async () => {
+      // Only load if canvas is still empty (no auto-save restored)
+      if (useCompositorStore.getState().project.layers.length > 0) return;
+      try {
+        const resp = await fetch('/kanoe.jpg');
+        if (!resp.ok) return;
+        const blob = await resp.blob();
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise<void>((resolve) => { img.onload = () => resolve(); });
+        addLayer({
+          name: 'kanoe.jpg',
+          imageData: dataUrl,
+          x: 0,
+          y: 0,
+          zIndex: 0,
+          visible: true,
+          locked: false,
+          opacity: 1.0,
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+        });
+        // Select the layer so the properties panel shows Actions
+        const layers = useCompositorStore.getState().project.layers;
+        if (layers.length > 0) {
+          selectLayer(layers[layers.length - 1].id, false);
+        }
+      } catch {
+        // Silently fail — it's just a demo image
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [isFirstVisit, addLayer, selectLayer]);
 
   // Initialize auto-reset zoom when first layer is added
   useAutoResetZoom();
@@ -118,7 +165,7 @@ function App() {
   return (
     <div className="h-screen flex flex-col bg-canvas-bg text-white overflow-hidden">
       {/* Top Toolbar */}
-      <Toolbar />
+      <Toolbar onHelpClick={() => setShowTutorial(true)} />
 
       {/* Main Content Area */}
       <div className="flex flex-1 gap-0 overflow-hidden relative">
@@ -215,6 +262,12 @@ function App() {
         isOpen={isShapeModalOpen}
         onClose={handleCloseShapeModal}
         existingLayer={editingShapeLayer}
+      />
+
+      {/* Tutorial Overlay */}
+      <TutorialOverlay
+        isOpen={showTutorial}
+        onClose={() => setShowTutorial(false)}
       />
     </div>
   );

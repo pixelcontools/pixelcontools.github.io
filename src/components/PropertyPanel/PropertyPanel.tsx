@@ -67,7 +67,7 @@ function PropertyPanel() {
 
             {/* Layer Modification Menu */}
             {selectedLayerIds.length === 1 && selectedLayers.length > 0 && (
-              <div className="relative">
+              <div className="relative" data-region="actions-menu">
                 <div className="text-xs font-semibold text-gray-300 mb-2">Actions</div>
                 <button
                   id="btn-modify-menu"
