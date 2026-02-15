@@ -27,16 +27,38 @@ const DraggableModal: React.FC<DraggableModalProps> = ({
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const resizeStartRef = useRef<{ x: number; y: number, startWidth: number, startHeight: number } | null>(null);
 
+  // Reset position & size to center of screen whenever modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const w = 1100;
+      const h = 900;
+      setSize({ width: w, height: h });
+      setPosition({
+        x: Math.max(0, Math.round((window.innerWidth - w) / 2)),
+        y: Math.max(0, Math.round((window.innerHeight - h) / 2)),
+      });
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isDragging && dragStartRef.current) {
         const dx = e.clientX - dragStartRef.current.x;
         const dy = e.clientY - dragStartRef.current.y;
         
-        setPosition((prev) => ({
-          x: prev.x + dx,
-          y: prev.y + dy,
-        }));
+        setPosition((prev) => {
+          const newX = prev.x + dx;
+          const newY = prev.y + dy;
+          // Keep at least 100px of modal visible horizontally, and title bar on screen vertically
+          const minX = -(size.width - 100);
+          const maxX = window.innerWidth - 100;
+          const minY = 0;
+          const maxY = window.innerHeight - 40; // 40px ~ title bar height
+          return {
+            x: Math.max(minX, Math.min(maxX, newX)),
+            y: Math.max(minY, Math.min(maxY, newY)),
+          };
+        });
         
         dragStartRef.current = { x: e.clientX, y: e.clientY };
       }

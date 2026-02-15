@@ -485,18 +485,36 @@ function findClosestColor(
   paletteOklab: OKLabColor[] | null,
   algorithm: ColorMatchAlgorithm,
   preserveDetailThreshold: number,
+  cache?: Map<number, FindClosestResult>,
 ): FindClosestResult {
+    // Round to integers for cache key (handles float RGB from error diffusion)
+    const ri = Math.max(0, Math.min(255, Math.round(pixel.r)));
+    const gi = Math.max(0, Math.min(255, Math.round(pixel.g)));
+    const bi = Math.max(0, Math.min(255, Math.round(pixel.b)));
+    const cacheKey = (ri << 16) | (gi << 8) | bi;
+
+    if (cache) {
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        // For preserve detail, cached result already accounts for it
+        return cached;
+      }
+    }
+
     let minDist = Infinity;
     let closest = palette[0];
 
+    // Use the integer-rounded pixel for matching (avoids sub-pixel noise)
+    const matchPixel = { r: ri, g: gi, b: bi };
+
     if (algorithm === 'oklab') {
-      const pixelOk = rgbToOklab(pixel);
+      const pixelOk = rgbToOklab(matchPixel);
       for (let i = 0; i < palette.length; i++) {
         const dist = deltaE_OKLab(pixelOk, paletteOklab![i]);
         if (dist < minDist) { minDist = dist; closest = palette[i]; }
       }
     } else {
-      const pixelLab = rgbToLab(pixel);
+      const pixelLab = rgbToLab(matchPixel);
       const distFn = algorithm === 'ciede2000' ? deltaE_CIEDE2000
                    : algorithm === 'cie94'     ? deltaE_CIE94
                    :                             deltaE_CIE76;
@@ -506,12 +524,20 @@ function findClosestColor(
       }
     }
 
+    let result: FindClosestResult;
+
     // Preserve detail: if the closest color is within the threshold, keep original pixel
     if (preserveDetailThreshold > 0 && minDist <= preserveDetailThreshold) {
-      return { color: pixel, dist: 0 };
+      result = { color: matchPixel, dist: 0 };
+    } else {
+      result = { color: closest, dist: minDist };
     }
 
-    return { color: closest, dist: minDist };
+    if (cache) {
+      cache.set(cacheKey, result);
+    }
+
+    return result;
 }
 
 function applyDithering(
@@ -529,6 +555,9 @@ function applyDithering(
     const paletteRGB = paletteHex.map(hexToRgb);
     const paletteLab = paletteRGB.map(rgbToLab);
     const paletteOklab = colorMatchAlgorithm === 'oklab' ? paletteRGB.map(rgbToOklab) : null;
+
+    // Color cache: avoids recomputing expensive distance functions for identical RGB values
+    const colorCache = new Map<number, FindClosestResult>();
 
     const strengthFactor = strength / 100;
 
@@ -558,7 +587,7 @@ function applyDithering(
                     b: Math.max(0, Math.min(255, pixels[index + 2] + nudge))
                 };
 
-                const { color: newColor } = findClosestColor(oldColor, paletteRGB, paletteLab, paletteOklab, colorMatchAlgorithm, preserveDetailThreshold);
+                const { color: newColor } = findClosestColor(oldColor, paletteRGB, paletteLab, paletteOklab, colorMatchAlgorithm, preserveDetailThreshold, colorCache);
 
                 pixels[index] = newColor.r;
                 pixels[index + 1] = newColor.g;
@@ -582,7 +611,7 @@ function applyDithering(
                     b: pixelDataFloat[index + 2] 
                 };
                 
-                const { color: newColor } = findClosestColor(oldColor, paletteRGB, paletteLab, paletteOklab, colorMatchAlgorithm, preserveDetailThreshold);
+                const { color: newColor } = findClosestColor(oldColor, paletteRGB, paletteLab, paletteOklab, colorMatchAlgorithm, preserveDetailThreshold, colorCache);
 
                 pixels[index] = newColor.r;
                 pixels[index + 1] = newColor.g;
@@ -1141,11 +1170,12 @@ self.onmessage = async (e: MessageEvent) => {
 
                 const paletteLab = paletteRGB.map(rgbToLab);
                 const paletteOk = colorMatchAlgorithm === 'oklab' ? paletteRGB.map(rgbToOklab) : null;
+                const kmeansCache = new Map<number, FindClosestResult>();
 
                 for (let i = 0; i < pixels.length; i += 4) {
                     if (pixels[i + 3] > 128) {
                         const pixelColor = { r: pixels[i], g: pixels[i + 1], b: pixels[i + 2] };
-                        const { color: closestColor } = findClosestColor(pixelColor, paletteRGB, paletteLab, paletteOk, colorMatchAlgorithm, 0);
+                        const { color: closestColor } = findClosestColor(pixelColor, paletteRGB, paletteLab, paletteOk, colorMatchAlgorithm, 0, kmeansCache);
                         pixels[i] = closestColor.r;
                         pixels[i + 1] = closestColor.g;
                         pixels[i + 2] = closestColor.b;

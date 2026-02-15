@@ -102,6 +102,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const workerRef = useRef<Worker | null>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const jobIdRef = useRef<number>(0);
 
   // Track previous state to restore K-Means when switching back to 'none'
   const wasKmeansEnabledRef = useRef<boolean>(false);
@@ -138,55 +139,53 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     setColorStats(result);
   };
 
+  // Helper to (re)create worker with message handler
+  const createWorker = useCallback(() => {
+    workerRef.current?.terminate();
+    const w = new PixelatorWorker();
+    w.onmessage = (e) => {
+      const { type, imageData, message, suggestions, generatedPalette } = e.data;
+      if (type === 'success') {
+        const canvas = document.createElement('canvas');
+        canvas.width = imageData.width;
+        canvas.height = imageData.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.putImageData(imageData, 0, 0);
+          setImageDimensions({ width: imageData.width, height: imageData.height });
+          setResultDimensions({ width: imageData.width, height: imageData.height });
+          if (pinFitToScreen) {
+            const newZoom = calculateFitZoom(imageData.width, imageData.height);
+            setZoom(newZoom);
+          }
+          setPreviewImage(canvas.toDataURL());
+          analyzePreviewColors(imageData);
+          if (generatedPalette) {
+            setGeneratedPalette(generatedPalette);
+          } else {
+            setGeneratedPalette([]);
+          }
+        }
+      } else if (type === 'suggestions') {
+        setSuggestedColors(suggestions);
+        setIsSuggesting(false);
+      } else {
+        console.error('Pixelator Worker Error:', message);
+        setIsSuggesting(false);
+      }
+      setIsProcessing(false);
+    };
+    workerRef.current = w;
+    return w;
+  }, [pinFitToScreen]);
+
   // Initialize Worker
   useEffect(() => {
-    workerRef.current = new PixelatorWorker();
-    if (workerRef.current) {
-      workerRef.current.onmessage = (e) => {
-        const { type, imageData, message, suggestions, generatedPalette } = e.data;
-        if (type === 'success') {
-          // Convert ImageData back to Data URL for display
-          const canvas = document.createElement('canvas');
-          canvas.width = imageData.width;
-          canvas.height = imageData.height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.putImageData(imageData, 0, 0);
-
-            // Update dimensions immediately to avoid flash
-            setImageDimensions({ width: imageData.width, height: imageData.height });
-            setResultDimensions({ width: imageData.width, height: imageData.height });
-
-            // Calculate zoom immediately if pinned
-            if (pinFitToScreen) {
-              const newZoom = calculateFitZoom(imageData.width, imageData.height);
-              setZoom(newZoom);
-            }
-
-            setPreviewImage(canvas.toDataURL());
-            analyzePreviewColors(imageData);
-
-            if (generatedPalette) {
-              setGeneratedPalette(generatedPalette);
-            } else {
-              setGeneratedPalette([]);
-            }
-          }
-        } else if (type === 'suggestions') {
-          setSuggestedColors(suggestions);
-          setIsSuggesting(false);
-        } else {
-          console.error('Pixelator Worker Error:', message);
-          setIsSuggesting(false);
-        }
-        setIsProcessing(false);
-      };
-    }
-
+    createWorker();
     return () => {
       workerRef.current?.terminate();
     };
-  }, []);
+  }, [createWorker]);
 
   // Sync display height when targetHeight changes
   useEffect(() => {
@@ -298,13 +297,20 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
 
   // Trigger Processing
   const processImage = useCallback(() => {
-    if (!workerRef.current || !layer.imageData) return;
+    if (!layer.imageData) return;
+
+    // Cancel any in-flight worker job by terminating and recreating
+    createWorker();
+    const currentJobId = ++jobIdRef.current;
 
     setIsProcessing(true);
 
     // Load image to get ImageData
     const img = new Image();
     img.onload = () => {
+      // If another processImage call happened while loading, bail out
+      if (currentJobId !== jobIdRef.current) return;
+
       const canvas = document.createElement('canvas');
       canvas.width = img.width;
       canvas.height = img.height;
@@ -348,7 +354,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     };
     img.src = layer.imageData;
 
-  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, colorMatchAlgorithm, preserveDetailThreshold]);
+  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, colorMatchAlgorithm, preserveDetailThreshold, createWorker]);
 
   // Debounced Effect
   useEffect(() => {

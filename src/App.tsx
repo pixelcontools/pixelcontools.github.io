@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Canvas from './components/Canvas/Canvas';
 import LayerPanel from './components/LayerPanel/LayerPanel';
 import PropertyPanel from './components/PropertyPanel/PropertyPanel';
@@ -99,8 +99,9 @@ function App() {
   // Initialize auto-reset zoom when first layer is added
   useAutoResetZoom();
 
-  // ─── Global drag-and-drop for image files ─────────────────────────────
+  // ─── Drag-and-drop for image files (canvas area only) ─────────────────
   const [isDroppingFile, setIsDroppingFile] = useState(false);
+  const canvasDropRef = useRef<HTMLDivElement>(null);
 
   const handleDroppedFiles = useCallback(async (files: FileList) => {
     for (const file of Array.from(files)) {
@@ -145,6 +146,7 @@ function App() {
   useEffect(() => {
     let counter = 0;
 
+    // Show overlay when files are dragged anywhere over the window
     const onDragEnter = (e: DragEvent) => {
       e.preventDefault();
       counter++;
@@ -154,7 +156,15 @@ function App() {
     };
     const onDragOver = (e: DragEvent) => {
       e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      if (e.dataTransfer) {
+        // Show 'copy' cursor when over canvas area, 'none' elsewhere
+        const el = canvasDropRef.current;
+        if (el && el.contains(e.target as Node)) {
+          e.dataTransfer.dropEffect = 'copy';
+        } else {
+          e.dataTransfer.dropEffect = 'none';
+        }
+      }
     };
     const onDragLeave = (e: DragEvent) => {
       e.preventDefault();
@@ -168,7 +178,9 @@ function App() {
       e.preventDefault();
       counter = 0;
       setIsDroppingFile(false);
-      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+      // Only accept drop if it landed on the canvas area
+      const el = canvasDropRef.current;
+      if (el && el.contains(e.target as Node) && e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
         handleDroppedFiles(e.dataTransfer.files);
       }
     };
@@ -258,8 +270,17 @@ function App() {
         {isPortrait ? (
           <>
             {/* Portrait: Canvas fills full width, panels are overlay drawers */}
-            <div className="flex-1 overflow-hidden">
+            <div ref={canvasDropRef} className="flex-1 overflow-hidden relative">
               <Canvas />
+              {isDroppingFile && (
+                <div className="absolute inset-0 z-[300] bg-black/60 flex items-center justify-center pointer-events-none rounded">
+                  <div className="border-4 border-dashed border-blue-400 rounded-2xl px-12 py-10 bg-gray-900/80 text-center">
+                    <div className="text-5xl mb-3">📂</div>
+                    <div className="text-xl font-semibold text-blue-300">Drop image(s) here</div>
+                    <div className="text-sm text-gray-400 mt-1">PNG, JPG, GIF, WebP, SVG</div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Hamburger buttons - bottom corners */}
@@ -320,8 +341,17 @@ function App() {
             <div className="w-64 border-r border-border overflow-hidden flex flex-col">
               <LayerPanel />
             </div>
-            <div className="flex-1 overflow-hidden">
+            <div ref={canvasDropRef} className="flex-1 overflow-hidden relative">
               <Canvas />
+              {isDroppingFile && (
+                <div className="absolute inset-0 z-[300] bg-black/60 flex items-center justify-center pointer-events-none rounded">
+                  <div className="border-4 border-dashed border-blue-400 rounded-2xl px-12 py-10 bg-gray-900/80 text-center">
+                    <div className="text-5xl mb-3">📂</div>
+                    <div className="text-xl font-semibold text-blue-300">Drop image(s) here</div>
+                    <div className="text-sm text-gray-400 mt-1">PNG, JPG, GIF, WebP, SVG</div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="w-64 border-l border-border overflow-hidden flex flex-col">
               <PropertyPanel />
@@ -356,16 +386,6 @@ function App() {
         onClose={() => setShowTutorial(false)}
       />
 
-      {/* File drop overlay */}
-      {isDroppingFile && (
-        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center pointer-events-none">
-          <div className="border-4 border-dashed border-blue-400 rounded-2xl px-12 py-10 bg-gray-900/80 text-center">
-            <div className="text-5xl mb-3">📂</div>
-            <div className="text-xl font-semibold text-blue-300">Drop image(s) to add as layers</div>
-            <div className="text-sm text-gray-400 mt-1">PNG, JPG, GIF, WebP, SVG</div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

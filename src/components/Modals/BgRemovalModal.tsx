@@ -305,8 +305,13 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
       const cw = containerRef.current.clientWidth;
       const ch = containerRef.current.clientHeight;
       if (cw > 0 && ch > 0) {
-        const fit = Math.min(cw / imgDim.w, ch / imgDim.h) * 0.9;
-        setZoom(Math.max(0.05, fit));
+        const fit = Math.max(0.05, Math.min(cw / imgDim.w, ch / imgDim.h) * 0.9);
+        setZoom(fit);
+        // Center the image in the container
+        setPan({
+          x: (cw - imgDim.w * fit) / 2,
+          y: (ch - imgDim.h * fit) / 2,
+        });
         hasInitialFitRef.current = true;
       }
     }
@@ -679,9 +684,9 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
     // Mouse position relative to container
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    const factor = e.deltaY > 0 ? 1 / 1.12 : 1.12;
     setZoom(prevZoom => {
-      const newZoom = Math.max(0.05, Math.min(10, prevZoom + delta));
+      const newZoom = Math.max(0.05, Math.min(10, prevZoom * factor));
       const scale = newZoom / prevZoom;
       // Adjust pan so the point under the cursor stays fixed
       setPan(prev => ({
