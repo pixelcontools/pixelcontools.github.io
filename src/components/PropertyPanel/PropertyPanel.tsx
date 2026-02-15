@@ -20,7 +20,6 @@ function PropertyPanel() {
     selectedLayerIds.includes(layer.id)
   );
 
-  const [isModifyMenuOpen, setIsModifyMenuOpen] = useState(false);
   const [isTransparencyModalOpen, setIsTransparencyModalOpen] = useState(false);
   const [isPixelatorModalOpen, setIsPixelatorModalOpen] = useState(false);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
@@ -67,67 +66,64 @@ function PropertyPanel() {
 
             {/* Layer Modification Menu */}
             {selectedLayerIds.length === 1 && selectedLayers.length > 0 && (
-              <div className="relative" data-region="actions-menu">
-                <div className="text-xs font-semibold text-gray-300 mb-2">Actions</div>
-                <button
-                  id="btn-modify-menu"
-                  onClick={() => setIsModifyMenuOpen(!isModifyMenuOpen)}
-                  className="w-full px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded transition-colors flex justify-between items-center"
-                  aria-label="Open modify menu"
-                  aria-expanded={isModifyMenuOpen}
-                >
-                  <span>Modify...</span>
-                  <span className="text-[10px]">▼</span>
-                </button>
-                
-                {isModifyMenuOpen && (
-                  <div className="absolute left-0 top-full mt-1 w-full bg-panel-bg border border-border rounded shadow-lg z-20">
-                    <button
-                      id="btn-open-transparency-modal"
-                      onClick={() => {
-                        setIsTransparencyModalOpen(true);
-                        setIsModifyMenuOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-slate-700 hover:text-white"
-                      aria-label="Open transparency masking"
-                    >
-                      Transparency Masking
-                    </button>
-                    <button
-                      id="btn-open-pixelator-modal"
-                      onClick={() => {
-                        setIsPixelatorModalOpen(true);
-                        setIsModifyMenuOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-slate-700 hover:text-white"
-                      aria-label="Open pixelator"
-                    >
-                      Pixelator
-                    </button>
-                    <button
-                      id="btn-open-crop-modal"
-                      onClick={() => {
-                        setIsCropModalOpen(true);
-                        setIsModifyMenuOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-slate-700 hover:text-white"
-                      aria-label="Open crop tool"
-                    >
-                      Crop
-                    </button>
-                    <button
-                      id="btn-open-bg-removal-modal"
-                      onClick={() => {
-                        setIsBgRemovalModalOpen(true);
-                        setIsModifyMenuOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-slate-700 hover:text-white"
-                      aria-label="Open background removal"
-                    >
-                      BG Removal
-                    </button>
-                  </div>
-                )}
+              <div data-region="actions-menu">
+                <div className="text-xs font-semibold text-gray-300 mb-2">Modify</div>
+                <div className="flex flex-col gap-0.5" id="modify-actions">
+                  <button
+                    id="btn-open-transparency-modal"
+                    onClick={() => setIsTransparencyModalOpen(true)}
+                    className="flex items-center gap-2 w-full text-left px-2 py-1.5 text-xs text-gray-300 hover:bg-slate-700/50 hover:text-white rounded transition-colors"
+                    aria-label="Open transparency masking"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10" />
+                      <path d="M12 2v20" />
+                      <path d="M22 12H12" />
+                      <path d="M19 15l3-3-3-3" />
+                    </svg>
+                    <span>Transparency Mask</span>
+                  </button>
+                  <button
+                    id="btn-open-crop-modal"
+                    onClick={() => setIsCropModalOpen(true)}
+                    className="flex items-center gap-2 w-full text-left px-2 py-1.5 text-xs text-gray-300 hover:bg-slate-700/50 hover:text-white rounded transition-colors"
+                    aria-label="Open crop tool"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6 2v14a2 2 0 002 2h14" />
+                      <path d="M18 22V8a2 2 0 00-2-2H2" />
+                    </svg>
+                    <span>Crop</span>
+                  </button>
+                  <button
+                    id="btn-open-pixelator-modal"
+                    onClick={() => setIsPixelatorModalOpen(true)}
+                    className="flex items-center gap-2 w-full text-left px-2 py-1.5 text-xs text-gray-300 hover:bg-slate-700/50 hover:text-white rounded transition-colors"
+                    aria-label="Open pixelator / resize"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="2" width="8" height="8" rx="1" />
+                      <rect x="14" y="2" width="8" height="8" rx="1" />
+                      <rect x="2" y="14" width="8" height="8" rx="1" />
+                      <rect x="14" y="14" width="4" height="4" rx="0.5" />
+                    </svg>
+                    <span>Pixelator / Resize</span>
+                  </button>
+                  <button
+                    id="btn-open-bg-removal-modal"
+                    onClick={() => setIsBgRemovalModalOpen(true)}
+                    className="flex items-center gap-2 w-full text-left px-2 py-1.5 text-xs text-gray-300 hover:bg-slate-700/50 hover:text-white rounded transition-colors"
+                    aria-label="Open background removal"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 3a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H5z" />
+                      <path d="M9 3v18" />
+                      <path d="M3 9h6" />
+                      <path d="M3 15h6" />
+                    </svg>
+                    <span>BG Removal</span>
+                  </button>
+                </div>
               </div>
             )}
 

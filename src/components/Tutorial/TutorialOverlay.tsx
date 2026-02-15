@@ -14,6 +14,10 @@ export interface TutorialStep {
   placement?: 'top' | 'bottom' | 'left' | 'right' | 'center';
   /** Mobile placement override */
   mobilePlacement?: 'top' | 'bottom' | 'left' | 'right' | 'center';
+  /** Called when this step becomes active */
+  onEnter?: () => void;
+  /** Called when leaving this step */
+  onExit?: () => void;
 }
 
 const DESKTOP_STEPS: TutorialStep[] = [
@@ -49,8 +53,8 @@ const DESKTOP_STEPS: TutorialStep[] = [
   },
   {
     target: '[data-region="actions-menu"]',
-    title: 'Actions Menu',
-    description: 'With a layer selected, open Modify to access powerful tools:\n\n• Transparency Masking — Remove a chosen color and make it transparent.\n• Pixelator — Convert any image into pixel art with palette matching and dithering.\n• Crop — Trim the layer to a smaller region.\n• BG Removal — Remove backgrounds with click, brush, or AI tools.',
+    title: 'Modify Tools',
+    description: 'With a layer selected, these tools are always available:\n\n• Transparency Mask — Remove a chosen color and make it transparent.\n• Crop — Trim the layer to a smaller region.\n• Pixelator / Resize — Resize an image or convert it into pixel art with palette matching and dithering.\n• BG Removal — Remove backgrounds with click, brush, or AI tools.',
     placement: 'left',
   },
   {
@@ -99,23 +103,22 @@ const MOBILE_STEPS: TutorialStep[] = [
     placement: 'center',
   },
   {
-    target: null,
+    target: '#btn-mobile-layers-toggle',
     title: 'Layers Panel (☰)',
     description: 'Tap the ☰ button in the bottom-left corner to open the layers drawer. Reorder layers, toggle visibility, and create text or shape layers from here.',
-    placement: 'center',
-    mobileTarget: null,
+    placement: 'top',
   },
   {
-    target: null,
+    target: '#btn-mobile-properties-toggle',
     title: 'Properties Panel (⚙)',
     description: 'Tap the ⚙ button in the bottom-right corner. Adjust opacity, position, canvas size, and background color.',
-    placement: 'center',
+    placement: 'top',
   },
   {
-    target: null,
-    title: 'Actions Menu',
-    description: 'With a layer selected, open Properties (⚙) and tap Modify to access:\n\n• Transparency Masking — Remove a color and make it transparent.\n• Pixelator — Convert images to pixel art with palette matching and dithering.\n• Crop — Trim the layer to a smaller region.\n• BG Removal — Remove backgrounds with click, brush, or AI tools.',
-    placement: 'center',
+    target: '#btn-mobile-properties-toggle',
+    title: 'Modify Tools',
+    description: 'With a layer selected, open Properties (⚙) to find the Modify section with these tools:\n\n• Transparency Mask — Remove a color and make it transparent.\n• Crop — Trim the layer to a smaller region.\n• Pixelator / Resize — Resize an image or convert it to pixel art with palette matching and dithering.\n• BG Removal — Remove backgrounds with click, brush, or AI tools.',
+    placement: 'top',
   },
   {
     target: '[data-region="zoom-controls"]',
@@ -172,6 +175,15 @@ function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
   useEffect(() => {
     if (isOpen) setCurrentStep(0);
   }, [isOpen]);
+
+  // Fire onEnter/onExit callbacks when the active step changes
+  useEffect(() => {
+    if (!isOpen) return;
+    step.onEnter?.();
+    return () => {
+      step.onExit?.();
+    };
+  }, [currentStep, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isOpen) return null;
 

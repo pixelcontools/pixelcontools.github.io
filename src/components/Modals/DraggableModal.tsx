@@ -27,15 +27,21 @@ const DraggableModal: React.FC<DraggableModalProps> = ({
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const resizeStartRef = useRef<{ x: number; y: number, startWidth: number, startHeight: number } | null>(null);
 
-  // Reset position & size to center of screen whenever modal opens
+  // Reset position & size to center of screen whenever modal opens.
+  // Uses percentage-based sizing so the modal scales naturally:
+  //   - Small screens (e.g. 1366×768): ~90% of viewport → ~1229×691
+  //   - Medium screens (1920×1080): caps at 1100×900 (the ideal max)
+  //   - Large screens (2560+): stays at 1100×900, centered with plenty of room
   useEffect(() => {
     if (isOpen) {
-      const w = 1100;
-      const h = 900;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const w = Math.min(1100, Math.round(vw * 0.9));
+      const h = Math.min(900, Math.round(vh * 0.9));
       setSize({ width: w, height: h });
       setPosition({
-        x: Math.max(0, Math.round((window.innerWidth - w) / 2)),
-        y: Math.max(0, Math.round((window.innerHeight - h) / 2)),
+        x: Math.max(0, Math.round((vw - w) / 2)),
+        y: Math.max(0, Math.round((vh - h) / 2)),
       });
     }
   }, [isOpen]);
@@ -99,8 +105,8 @@ const DraggableModal: React.FC<DraggableModalProps> = ({
         const dy = e.clientY - resizeStartRef.current.y;
         
         setSize({
-          width: Math.max(600, resizeStartRef.current.startWidth + dx),
-          height: Math.max(400, resizeStartRef.current.startHeight + dy)
+          width: Math.max(400, resizeStartRef.current.startWidth + dx),
+          height: Math.max(300, resizeStartRef.current.startHeight + dy)
         });
       }
     };

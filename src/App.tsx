@@ -285,6 +285,7 @@ function App() {
 
             {/* Hamburger buttons - bottom corners */}
             <button
+              id="btn-mobile-layers-toggle"
               onClick={() => { setShowLayersDrawer(!showLayersDrawer); setShowPropertiesDrawer(false); }}
               className={`fixed bottom-4 left-4 z-[200] w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-lg transition-colors ${
                 showLayersDrawer ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
@@ -294,6 +295,7 @@ function App() {
               ☰
             </button>
             <button
+              id="btn-mobile-properties-toggle"
               onClick={() => { setShowPropertiesDrawer(!showPropertiesDrawer); setShowLayersDrawer(false); }}
               className={`fixed bottom-4 right-4 z-[200] w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-lg transition-colors ${
                 showPropertiesDrawer ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
@@ -307,7 +309,7 @@ function App() {
             {showLayersDrawer && (
               <>
                 <div className="fixed inset-0 bg-black/50 z-[150]" onClick={() => setShowLayersDrawer(false)} />
-                <div className="fixed top-16 left-0 bottom-0 w-72 bg-panel-bg border-r border-border z-[160] overflow-hidden flex flex-col animate-slide-in-left shadow-2xl">
+                <div id="mobile-layers-drawer" className="fixed top-16 left-0 bottom-0 w-72 bg-panel-bg border-r border-border z-[160] overflow-hidden flex flex-col animate-slide-in-left shadow-2xl">
                   <div className="flex items-center justify-between px-3 py-2 border-b border-border">
                     <span className="text-sm font-semibold text-gray-300">Layers</span>
                     <button onClick={() => setShowLayersDrawer(false)} className="text-gray-400 hover:text-white text-lg px-1">✕</button>
@@ -323,7 +325,7 @@ function App() {
             {showPropertiesDrawer && (
               <>
                 <div className="fixed inset-0 bg-black/50 z-[150]" onClick={() => setShowPropertiesDrawer(false)} />
-                <div className="fixed top-16 right-0 bottom-0 w-72 bg-panel-bg border-l border-border z-[160] overflow-hidden flex flex-col animate-slide-in-right shadow-2xl">
+                <div id="mobile-properties-drawer" className="fixed top-16 right-0 bottom-0 w-72 bg-panel-bg border-l border-border z-[160] overflow-hidden flex flex-col animate-slide-in-right shadow-2xl">
                   <div className="flex items-center justify-between px-3 py-2 border-b border-border">
                     <span className="text-sm font-semibold text-gray-300">Properties</span>
                     <button onClick={() => setShowPropertiesDrawer(false)} className="text-gray-400 hover:text-white text-lg px-1">✕</button>
