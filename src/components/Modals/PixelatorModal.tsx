@@ -1264,6 +1264,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                   ref={imgRef}
                   src={previewImage}
                   alt="Preview"
+                  draggable={false}
                   onLoad={handleImageLoad}
                   style={{
                     width: imageDimensions ? `${imageDimensions.width * zoom}px` : 'auto',
