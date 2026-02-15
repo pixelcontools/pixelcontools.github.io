@@ -147,6 +147,9 @@ function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [spotlightRect, setSpotlightRect] = useState<DOMRect | null>(null);
 
+  // Ref to measure actual tooltip height for positioning
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
   const step = steps[currentStep];
 
   // Compute spotlight rect for the current step's target
@@ -205,9 +208,6 @@ function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
   };
 
   const placement = (isPortrait && step.mobilePlacement) ? step.mobilePlacement : (step.placement || 'bottom');
-
-  // Ref to measure actual tooltip height for positioning
-  const tooltipRef = useRef<HTMLDivElement>(null);
 
   // Compute tooltip position — always clamped to stay in viewport
   const getTooltipStyle = (): React.CSSProperties => {
