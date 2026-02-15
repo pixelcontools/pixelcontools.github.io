@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import DraggableModal from './DraggableModal';
 import EyedropperModal from './EyedropperModal';
+import GeoPixelsPaletteModal from './GeoPixelsPaletteModal';
 import { usePortraitMode } from '../../hooks/usePortraitMode';
 import useCompositorStore from '../../store/compositorStore';
 import { Layer } from '../../types/compositor.types';
@@ -99,6 +100,9 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
 
   // Eyedropper modal state
   const [isEyedropperOpen, setIsEyedropperOpen] = useState<boolean>(false);
+
+  // GeoPixels palette modal state
+  const [isGeoPixelsPaletteOpen, setIsGeoPixelsPaletteOpen] = useState<boolean>(false);
 
   const workerRef = useRef<Worker | null>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -556,6 +560,23 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     }
   };
 
+  // GeoPixels palette: add fetched colors to custom palette text field
+  const handleGeoPixelsColors = (colors: string[]) => {
+    if (colors.length === 0) return;
+    const newColors = colors.join(', ');
+    const existing = customPaletteInput.trim();
+    if (existing === '') {
+      setCustomPaletteInput(newColors);
+    } else {
+      setCustomPaletteInput(`${existing}, ${newColors}`);
+    }
+    // Auto-switch to geopixels+custom if not already on custom/geopixels+custom
+    if (paletteMode !== 'custom' && paletteMode !== 'geopixels+custom') {
+      debounceTimeRef.current = 100;
+      setPaletteMode('geopixels+custom');
+    }
+  };
+
   // K-Means: Send generated palette colors to Geopixels+Custom text field
   const handleSendKmeansToCustom = () => {
     if (generatedPalette.length === 0) return;
@@ -757,6 +778,13 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                       className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium rounded transition-colors"
                     >
                       Eyedropper
+                    </button>
+                    <button
+                      onClick={() => setIsGeoPixelsPaletteOpen(true)}
+                      className="flex-1 px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-medium rounded transition-colors"
+                      title="Fetch your owned colors from GeoPixels"
+                    >
+                      🎨 My Colors
                     </button>
                     <div className="group relative">
                       <span className="cursor-help text-xs text-blue-400">?</span>
@@ -1264,6 +1292,13 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           onClose={() => setIsEyedropperOpen(false)}
           imageDataUrl={layer.imageData}
           onAddColors={handleEyedropperColors}
+        />
+
+        {/* GeoPixels Palette Modal */}
+        <GeoPixelsPaletteModal
+          isOpen={isGeoPixelsPaletteOpen}
+          onClose={() => setIsGeoPixelsPaletteOpen(false)}
+          onAddColors={handleGeoPixelsColors}
         />
       </div>
     )} />
