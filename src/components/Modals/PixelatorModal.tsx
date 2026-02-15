@@ -29,6 +29,7 @@ const COLOR_MATCH_ALGORITHMS = [
   { value: 'ciede2000', label: 'CIEDE2000', desc: 'Gold standard — great for skin tones and gradients' },
   { value: 'cie94', label: 'CIE94 (graphics)', desc: 'Industry standard — weights chroma/hue over lightness' },
   { value: 'cie76', label: 'CIE76 (euclidean)', desc: 'Simple Euclidean in Lab space — fast but less accurate' },
+  { value: 'redmean', label: 'Redmean (turbo)', desc: 'Fastest — weighted RGB, no color space conversion needed' },
 ];
 
 const DITHER_ALGORITHMS = [

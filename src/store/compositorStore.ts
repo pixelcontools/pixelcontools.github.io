@@ -203,20 +203,26 @@ const useCompositorStore = create<CompositorStore>()(
 
       // Layer operations
       addLayer: (layer: Omit<Layer, 'id'> & { id?: string }) => {
-        set((state) => ({
-          project: {
-            ...state.project,
-            layers: [
-              ...state.project.layers,
-              {
-                ...layer,
-                id: layer.id || `layer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              },
-            ],
-            modified: new Date().toISOString(),
-          },
-          isDirty: true,
-        }));
+        const newId = layer.id || `layer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        set((state) => {
+          const isFirstLayer = state.project.layers.length === 0;
+          return {
+            project: {
+              ...state.project,
+              layers: [
+                ...state.project.layers,
+                {
+                  ...layer,
+                  id: newId,
+                },
+              ],
+              modified: new Date().toISOString(),
+            },
+            isDirty: true,
+            // Auto-select if it's the first layer
+            ...(isFirstLayer ? { selectedLayerIds: [newId] } : {}),
+          };
+        });
       },
 
       removeLayer: (layerId: string) => {

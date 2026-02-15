@@ -12,7 +12,7 @@ const WPLACE_FREE_PALETTE = [
   "#000000","#3c3c3c","#787878","#d2d2d2","#ffffff","#600018","#ed1c24","#ff7f27","#f6aa09","#f9dd3b","#fffabc","#0eb968","#13e67b","#87ff5e","#0c816e","#10aea6","#13e1be","#60f7f2","#28509e","#4093e4","#6b50f6","#99b1fb","#780c99","#aa38b9","#e09ff9","#cb007a","#ec1f80","#f38da9","#684634","#95682a","#f8b277"
 ];
 
-type ColorMatchAlgorithm = 'oklab' | 'ciede2000' | 'cie94' | 'cie76';
+type ColorMatchAlgorithm = 'oklab' | 'ciede2000' | 'cie94' | 'cie76' | 'redmean';
 
 interface RGB { r: number; g: number; b: number; }
 interface LAB { l: number; a: number; b: number; }
@@ -104,6 +104,15 @@ function deltaE_CIE76(labA: LAB, labB: LAB): number {
   const da = labA.a - labB.a;
   const db = labA.b - labB.b;
   return Math.sqrt(dL * dL + da * da + db * db);
+}
+
+/** Redmean: fast weighted RGB distance (no color space conversion) */
+function deltaE_Redmean(a: RGB, b: RGB): number {
+  const rMean = (a.r + b.r) / 2;
+  const dr = a.r - b.r;
+  const dg = a.g - b.g;
+  const db = a.b - b.b;
+  return Math.sqrt((2 + rMean / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rMean) / 256) * db * db);
 }
 
 /** CIE94: weighted Euclidean in CIELAB (graphics arts) */
@@ -511,6 +520,11 @@ function findClosestColor(
       const pixelOk = rgbToOklab(matchPixel);
       for (let i = 0; i < palette.length; i++) {
         const dist = deltaE_OKLab(pixelOk, paletteOklab![i]);
+        if (dist < minDist) { minDist = dist; closest = palette[i]; }
+      }
+    } else if (algorithm === 'redmean') {
+      for (let i = 0; i < palette.length; i++) {
+        const dist = deltaE_Redmean(matchPixel, palette[i]);
         if (dist < minDist) { minDist = dist; closest = palette[i]; }
       }
     } else {

@@ -25,7 +25,7 @@ function GridToggle() {
       <button
         id="btn-toggle-grid"
         onClick={toggleGrid}
-        className={`px-3 py-1 text-sm font-medium rounded transition-colors ${
+        className={`px-2 py-1 rounded transition-colors ${
           gridEnabled
             ? 'bg-gray-600 text-white hover:bg-gray-500'
             : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -34,7 +34,10 @@ function GridToggle() {
         aria-label={gridEnabled ? 'Disable pixel grid' : 'Enable pixel grid'}
         aria-pressed={gridEnabled}
       >
-        Grid
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path d="M3 3v18h18" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M3 9h18M3 15h18M9 3v18M15 3v18" strokeLinecap="round" />
+        </svg>
       </button>
 
       {gridEnabled && (
