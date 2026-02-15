@@ -117,6 +117,8 @@ export interface HistoryState {
 // UI state
 export interface UIState {
   activeTool: 'select' | 'pan' | 'zoom';
+  leftClickPan: boolean; // When true, left-click pans and middle-click drags layers
+  spaceHeld: boolean; // When true, temporarily inverts leftClickPan behavior
   showRulers: boolean;
   showSelectionBorders: boolean;
   showSelectionTools: boolean; // Show edit/delete/visibility icons on selected layers

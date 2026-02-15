@@ -18,6 +18,8 @@ function Toolbar({ onHelpClick }: { onHelpClick?: () => void }) {
   const toggleSelectionBorders = useCompositorStore((state) => state.toggleSelectionBorders);
   const showSelectionTools = useCompositorStore((state) => state.ui.showSelectionTools);
   const toggleSelectionTools = useCompositorStore((state) => state.toggleSelectionTools);
+  const leftClickPan = useCompositorStore((state) => state.ui.leftClickPan);
+  const toggleLeftClickPan = useCompositorStore((state) => state.toggleLeftClickPan);
   const borderAnimationSpeed = useCompositorStore((state) => state.ui.selectionBorderAnimationSpeed);
   const setSelectionBorderAnimationSpeed = useCompositorStore((state) => state.setSelectionBorderAnimationSpeed);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -30,8 +32,9 @@ function Toolbar({ onHelpClick }: { onHelpClick?: () => void }) {
     const preferences = loadPreferences();
     preferences.showSelectionBorders = showSelectionBorders;
     preferences.selectionBorderAnimationSpeed = borderAnimationSpeed;
+    preferences.leftClickPan = leftClickPan;
     savePreferences(preferences);
-  }, [showSelectionBorders, borderAnimationSpeed]);
+  }, [showSelectionBorders, borderAnimationSpeed, leftClickPan]);
 
   const handleNameSave = () => {
     if (tempName.trim()) {
@@ -56,6 +59,24 @@ function Toolbar({ onHelpClick }: { onHelpClick?: () => void }) {
   const gridBorderToolsControls = (
     <>
       <GridToggle />
+      {/* Left-click pan toggle */}
+      <button
+        id="btn-toggle-left-click-pan"
+        onClick={toggleLeftClickPan}
+        title={leftClickPan
+          ? 'Pan mode ON: Left-click pans the canvas. Middle-click to drag layers. Hold Space to temporarily switch back. Click to toggle.'
+          : 'Pan mode OFF: Left-click drags layers. Middle-click to pan. Hold Space to temporarily pan with left-click. Click to toggle.'}
+        aria-label={leftClickPan ? 'Disable left-click panning' : 'Enable left-click panning'}
+        aria-pressed={leftClickPan}
+        className={`px-2 py-1 rounded transition-colors ${leftClickPan
+          ? 'bg-blue-600 text-white hover:bg-blue-500'
+          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+        }`}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11" />
+        </svg>
+      </button>
       {/* Hidden: Borders toggle + animation speed (code preserved) */}
       {false && (
         <>

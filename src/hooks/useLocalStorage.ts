@@ -23,6 +23,9 @@ interface StoredPreferences {
   canvasBorderOpacity?: number;
   canvasBorderEnabled?: boolean;
   canvasShadowIntensity?: number;
+
+  // Pan mode
+  leftClickPan?: boolean;
 }
 
 /**
@@ -76,6 +79,12 @@ export function useInitializePreferences(): void {
     }
     if (preferences.selectionBorderAnimationSpeed !== undefined) {
       useCompositorStore.getState().setSelectionBorderAnimationSpeed(preferences.selectionBorderAnimationSpeed);
+    }
+    if (preferences.leftClickPan !== undefined) {
+      const current = useCompositorStore.getState().ui.leftClickPan;
+      if (current !== preferences.leftClickPan) {
+        useCompositorStore.getState().toggleLeftClickPan();
+      }
     }
     
     // Apply canvas border settings

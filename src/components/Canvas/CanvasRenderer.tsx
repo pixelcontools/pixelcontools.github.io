@@ -29,6 +29,11 @@ function CanvasRenderer() {
   const setViewport = useCompositorStore((state) => state.setViewport);
   const removeLayer = useCompositorStore((state) => state.removeLayer);
   const updateLayer = useCompositorStore((state) => state.updateLayer);
+  const leftClickPan = useCompositorStore((state) => state.ui.leftClickPan);
+  const spaceHeld = useCompositorStore((state) => state.ui.spaceHeld);
+
+  // Effective pan mode: XOR of toggle and space key (space temporarily inverts)
+  const effectivePanMode = leftClickPan !== spaceHeld;
 
   const [loadedImages, setLoadedImages] = useState<Map<string, HTMLImageElement>>(new Map());
   const [isPanning, setIsPanning] = useState(false);
@@ -262,6 +267,8 @@ function CanvasRenderer() {
 
   /**
    * Handle canvas mouse events for layer dragging and panning
+   * When leftClickPan is ON:  left-click pans, middle-click drags layers
+   * When leftClickPan is OFF: left-click drags layers, middle-click pans (default)
    */
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     // console.log('[DEBUG] Canvas mouse down event fired');
@@ -271,33 +278,38 @@ function CanvasRenderer() {
       return;
     }
 
-    // Middle-click (button 1) for panning
-    if (e.button === 1) {
+    const isPanButton = effectivePanMode ? e.button === 0 : e.button === 1;
+    const isDragButton = effectivePanMode ? e.button === 1 : e.button === 0;
+
+    // Pan button (middle-click normally, left-click in pan mode)
+    if (isPanButton) {
       e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX, y: e.clientY });
-      // console.log('[DEBUG] Started panning with middle-click');
+      if (!effectivePanMode) {
+        // Original middle-click behavior: don't process further
+        return;
+      }
+      // In pan mode, left-click always pans — done
       return;
     }
 
-    // Left-click (button 0) for layer selection/dragging or canvas panning
-    if (e.button !== 0) {
-      // console.log(`[DEBUG] Ignoring mouse button ${e.button}`);
+    // Drag button (left-click normally, middle-click in pan mode)
+    if (!isDragButton) {
       return;
+    }
+
+    if (effectivePanMode) {
+      // Middle-click drag in pan mode — prevent default browser behavior
+      e.preventDefault();
     }
 
     const { x: worldX, y: worldY } = getWorldCoordinates(e.clientX, e.clientY);
-
-    // console.log(
-    //   `[DEBUG] Left-click at world (${worldX.toFixed(1)}, ${worldY.toFixed(1)})`
-    // );
 
     // Find layer at this position (check in reverse order - top layer first)
     const sortedLayers = [...project.layers]
       .filter((layer) => layer.visible)
       .sort((a, b) => b.zIndex - a.zIndex);
-
-    // console.log(`[DEBUG] Checking ${sortedLayers.length} layers for click intersection`);
 
     for (const layer of sortedLayers) {
       if (
@@ -306,19 +318,13 @@ function CanvasRenderer() {
         worldY >= layer.y &&
         worldY < layer.y + layer.height
       ) {
-        // console.log(`[DEBUG] Layer clicked: ${layer.name} at (${layer.x}, ${layer.y}) size (${layer.width}x${layer.height})`);
-
         // Don't start dragging if layer is locked
         if (layer.locked) {
-          // Still allow selection, just not dragging
           selectLayer(layer.id, e.ctrlKey || e.metaKey);
           return;
         }
 
         const isMultiSelect = e.ctrlKey || e.metaKey;
-        
-        // If clicking a layer that's already selected (without Ctrl), keep other selections
-        // This allows multi-layer dragging by dragging any selected layer
         const isAlreadySelected = selectedLayerIds.includes(layer.id);
         const shouldKeepSelection = isAlreadySelected && !isMultiSelect;
         
@@ -327,18 +333,16 @@ function CanvasRenderer() {
         }
         
         startDraggingLayer(layer.id, worldX, worldY);
-        // console.log(`[DEBUG] Started dragging layer: ${layer.name}`);
         return;
-      } else {
-        // console.log(`[DEBUG] Layer ${layer.name} at (${layer.x}, ${layer.y}) size (${layer.width}x${layer.height}) - no hit`);
       }
     }
 
-    // No layer clicked - start panning with left-click instead
-    // console.log('[DEBUG] No layer clicked - starting left-click pan');
-    deselectAllLayers();
-    setIsPanning(true);
-    setPanStart({ x: e.clientX, y: e.clientY });
+    // No layer clicked — if this is left-click (non-pan mode), start panning as fallback
+    if (!effectivePanMode) {
+      deselectAllLayers();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX, y: e.clientY });
+    }
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -402,7 +406,7 @@ function CanvasRenderer() {
     <div
       ref={containerRef}
       id="canvas-renderer"
-      className="relative w-full h-full bg-canvas-bg overflow-hidden cursor-crosshair"
+      className={`relative w-full h-full bg-canvas-bg overflow-hidden ${effectivePanMode ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
       style={{ paddingTop: '20px', paddingLeft: '20px' }}
       onMouseDown={handleCanvasMouseDown}
       onMouseMove={handleCanvasMouseMove}

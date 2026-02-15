@@ -65,6 +65,8 @@ const DEFAULT_HISTORY: HistoryState = {
 
 const DEFAULT_UI: UIState = {
   activeTool: 'select',
+  leftClickPan: false,
+  spaceHeld: false,
   showRulers: false,
   showSelectionBorders: true,
   showSelectionTools: true,
@@ -117,6 +119,8 @@ interface CompositorStore extends AppState {
 
   // UI operations
   setActiveTool: (tool: 'select' | 'pan' | 'zoom') => void;
+  toggleLeftClickPan: () => void;
+  setSpaceHeld: (held: boolean) => void;
   toggleGrid: () => void;
   setGridDensity: (density: number) => void;
   toggleRulers: () => void;
@@ -720,6 +724,24 @@ const useCompositorStore = create<CompositorStore>()(
           ui: {
             ...state.ui,
             activeTool: tool,
+          },
+        }));
+      },
+
+      toggleLeftClickPan: () => {
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            leftClickPan: !state.ui.leftClickPan,
+          },
+        }));
+      },
+
+      setSpaceHeld: (held: boolean) => {
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            spaceHeld: held,
           },
         }));
       },

@@ -6,3 +6,7 @@ declare module '*?worker' {
   };
   export default workerConstructor;
 }
+
+interface Window {
+  fitCanvasToScreen?: () => void;
+}

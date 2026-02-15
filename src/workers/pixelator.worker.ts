@@ -482,6 +482,10 @@ const errorKernels: Record<string, { dx: number, dy: number, f: number }[]> = {
     ],
     'sierra-lite': [
         { dx: 1, dy: 0, f: 2 / 4 }, { dx: -1, dy: 1, f: 1 / 4 }, { dx: 0, dy: 1, f: 1 / 4 }
+    ],
+    'atkinson': [
+        { dx: 1, dy: 0, f: 1 / 8 }, { dx: 2, dy: 0, f: 1 / 8 }, { dx: -1, dy: 1, f: 1 / 8 },
+        { dx: 0, dy: 1, f: 1 / 8 }, { dx: 1, dy: 1, f: 1 / 8 }, { dx: 0, dy: 2, f: 1 / 8 }
     ]
 };
 

@@ -40,6 +40,7 @@ const DITHER_ALGORITHMS = [
   { value: 'stucki', label: 'Stucki' },
   { value: 'sierra-2', label: 'Sierra-2' },
   { value: 'sierra-lite', label: 'Sierra Lite' },
+  { value: 'atkinson', label: 'Atkinson' },
   { value: 'bayer-4x4', label: 'Bayer 4x4' },
   { value: 'bayer-8x8', label: 'Bayer 8x8' },
   { value: 'halftone-dot', label: 'Halftone Dot' },

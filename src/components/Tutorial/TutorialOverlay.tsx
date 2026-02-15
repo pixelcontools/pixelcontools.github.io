@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePortraitMode } from '../../hooks/usePortraitMode';
 
 export interface TutorialStep {
@@ -206,6 +206,9 @@ function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
 
   const placement = (isPortrait && step.mobilePlacement) ? step.mobilePlacement : (step.placement || 'bottom');
 
+  // Ref to measure actual tooltip height for positioning
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
   // Compute tooltip position — always clamped to stay in viewport
   const getTooltipStyle = (): React.CSSProperties => {
     if (!spotlightRect || placement === 'center') {
@@ -219,7 +222,8 @@ function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
 
     const pad = 16;
     const tooltipW = Math.min(360, window.innerWidth - 32);
-    const tooltipH = 280; // approximate max height of tooltip card
+    // Use measured height if available, otherwise a safe estimate
+    const tooltipH = tooltipRef.current ? tooltipRef.current.offsetHeight : 280;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
@@ -334,11 +338,19 @@ function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
 
       {/* Tooltip card */}
       <div
-        className="bg-gray-900 border border-gray-600 rounded-xl shadow-2xl p-5 z-[401] text-gray-200"
-        style={{ ...getTooltipStyle(), maxWidth: Math.min(380, window.innerWidth - 32) }}
+        ref={tooltipRef}
+        className="bg-gray-900 border border-gray-600 rounded-xl shadow-2xl p-5 z-[401] text-gray-200 flex flex-col"
+        style={(() => {
+          const base = getTooltipStyle();
+          const mw = Math.min(380, window.innerWidth - 32);
+          // Compute maxHeight based on the actual top position so the card never overflows the viewport
+          const topVal = typeof base.top === 'number' ? base.top : 16;
+          const mh = base.transform ? window.innerHeight - 32 : window.innerHeight - topVal - 16;
+          return { ...base, maxWidth: mw, maxHeight: mh };
+        })()}
       >
         {/* Step counter */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-shrink-0">
           <span className="text-xs text-gray-500 font-mono">{currentStep + 1} / {steps.length}</span>
           <button
             onClick={handleFinish}
@@ -349,13 +361,13 @@ function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
         </div>
 
         {/* Title */}
-        <h3 className="text-base font-bold text-white mb-2">{step.title}</h3>
+        <h3 className="text-base font-bold text-white mb-2 flex-shrink-0">{step.title}</h3>
 
-        {/* Description */}
-        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line mb-4">{step.description}</p>
+        {/* Description — scrollable when content is tall */}
+        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line mb-4 overflow-y-auto flex-shrink min-h-0">{step.description}</p>
 
         {/* Progress dots */}
-        <div className="flex items-center justify-center gap-1.5 mb-4">
+        <div className="flex items-center justify-center gap-1.5 mb-4 flex-shrink-0">
           {steps.map((_, i) => (
             <div
               key={i}
@@ -367,7 +379,7 @@ function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
         </div>
 
         {/* Navigation buttons */}
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 flex-shrink-0">
           <button
             onClick={handlePrev}
             disabled={currentStep === 0}

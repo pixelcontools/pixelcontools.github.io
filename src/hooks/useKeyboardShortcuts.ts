@@ -21,6 +21,7 @@ export function useKeyboardShortcuts() {
   const pasteSelectedLayers = useCompositorStore((state) => state.pasteSelectedLayers);
   const pasteFromClipboard = useCompositorStore((state) => state.pasteFromClipboard);
   const reorderSelectedLayers = useCompositorStore((state) => state.reorderSelectedLayers);
+  const setSpaceHeld = useCompositorStore((state) => state.setSpaceHeld);
 
   const isPanningRef = useRef(false);
   const panStartXRef = useRef(0);
@@ -84,11 +85,11 @@ export function useKeyboardShortcuts() {
       const isCtrlOrCmd = event.ctrlKey || event.metaKey;
       const isShift = event.shiftKey;
 
-      // Spacebar: Start pan mode
+      // Spacebar: Start pan mode (temporary override)
       if (event.code === 'Space' && !event.repeat) {
         event.preventDefault();
         isPanningRef.current = true;
-        // console.log('[DEBUG] Pan mode activated (Spacebar)');
+        setSpaceHeld(true);
         return;
       }
 
@@ -230,7 +231,7 @@ export function useKeyboardShortcuts() {
       // Spacebar: Stop pan mode
       if (event.code === 'Space') {
         isPanningRef.current = false;
-        // console.log('[DEBUG] Pan mode deactivated (Spacebar released)');
+        setSpaceHeld(false);
       }
 
       // Remove from held keys tracking
@@ -248,14 +249,20 @@ export function useKeyboardShortcuts() {
 
     const handleMouseDown = (event: MouseEvent) => {
       if (isPanningRef.current) {
+        // When leftClickPan is ON and space is held, space inverts to layer-drag mode,
+        // so we should NOT start panning here — let CanvasRenderer handle it
+        const leftClickPan = useCompositorStore.getState().ui.leftClickPan;
+        if (leftClickPan) return;
         panStartXRef.current = event.clientX;
         panStartYRef.current = event.clientY;
-        // console.log('[DEBUG] Pan drag started');
       }
     };
 
     const handleMouseMove = (event: MouseEvent) => {
       if (isPanningRef.current && (event.buttons & 1) === 1) {
+        // Don't pan here if leftClickPan is ON (space inverts to drag mode)
+        const leftClickPan = useCompositorStore.getState().ui.leftClickPan;
+        if (leftClickPan) return;
         const deltaX = event.clientX - panStartXRef.current;
         const deltaY = event.clientY - panStartYRef.current;
 
@@ -280,12 +287,23 @@ export function useKeyboardShortcuts() {
     window.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mousemove', handleMouseMove);
 
+    // Reset space-held state if window loses focus (prevents stuck state)
+    const handleBlur = () => {
+      isPanningRef.current = false;
+      setSpaceHeld(false);
+    };
+    window.addEventListener('blur', handleBlur);
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('blur', handleBlur);
       stopContinuousMovement();
+      // Ensure spaceHeld is cleared when effect re-runs (prevents stuck state during re-mount)
+      isPanningRef.current = false;
+      setSpaceHeld(false);
     };
   }, [
     selectedLayerIds,
@@ -302,6 +320,7 @@ export function useKeyboardShortcuts() {
     pasteSelectedLayers,
     pasteFromClipboard,
     reorderSelectedLayers,
+    setSpaceHeld,
   ]);
 }
 
