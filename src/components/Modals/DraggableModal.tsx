@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { usePortraitMode } from '../../hooks/usePortraitMode';
+
+type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
 
 interface DraggableModalProps {
   isOpen: boolean;
@@ -25,7 +27,12 @@ const DraggableModal: React.FC<DraggableModalProps> = ({
   const [size, setSize] = useState({ width: 1100, height: 900 });
   const [isResizing, setIsResizing] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
-  const resizeStartRef = useRef<{ x: number; y: number, startWidth: number, startHeight: number } | null>(null);
+  const resizeStartRef = useRef<{
+    x: number; y: number;
+    startWidth: number; startHeight: number;
+    startPosX: number; startPosY: number;
+    direction: ResizeDirection;
+  } | null>(null);
 
   // Reset position & size to center of screen whenever modal opens.
   // Uses percentage-based sizing so the modal scales naturally:
@@ -86,7 +93,7 @@ const DraggableModal: React.FC<DraggableModalProps> = ({
     };
   }, [isDragging]);
 
-  const handleResizeMouseDown = (e: React.MouseEvent) => {
+  const handleResizeMouseDown = useCallback((direction: ResizeDirection) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsResizing(true);
@@ -94,20 +101,46 @@ const DraggableModal: React.FC<DraggableModalProps> = ({
       x: e.clientX,
       y: e.clientY,
       startWidth: size.width,
-      startHeight: size.height
+      startHeight: size.height,
+      startPosX: position.x,
+      startPosY: position.y,
+      direction,
     };
-  };
+  }, [size, position]);
 
   useEffect(() => {
+    const MIN_W = 400;
+    const MIN_H = 300;
+
     const handleResizeMouseMove = (e: MouseEvent) => {
       if (isResizing && resizeStartRef.current) {
-        const dx = e.clientX - resizeStartRef.current.x;
-        const dy = e.clientY - resizeStartRef.current.y;
-        
-        setSize({
-          width: Math.max(400, resizeStartRef.current.startWidth + dx),
-          height: Math.max(300, resizeStartRef.current.startHeight + dy)
-        });
+        const { x: sx, y: sy, startWidth, startHeight, startPosX, startPosY, direction } = resizeStartRef.current;
+        const dx = e.clientX - sx;
+        const dy = e.clientY - sy;
+
+        let newW = startWidth;
+        let newH = startHeight;
+        let newX = startPosX;
+        let newY = startPosY;
+
+        // Horizontal component
+        if (direction.includes('e')) {
+          newW = Math.max(MIN_W, startWidth + dx);
+        } else if (direction.includes('w')) {
+          newW = Math.max(MIN_W, startWidth - dx);
+          newX = startPosX + startWidth - newW;
+        }
+
+        // Vertical component
+        if (direction.includes('s')) {
+          newH = Math.max(MIN_H, startHeight + dy);
+        } else if (direction.includes('n')) {
+          newH = Math.max(MIN_H, startHeight - dy);
+          newY = startPosY + startHeight - newH;
+        }
+
+        setSize({ width: newW, height: newH });
+        setPosition({ x: newX, y: newY });
       }
     };
 
@@ -167,7 +200,7 @@ const MobileOrDraggable: React.FC<{
   setIsDragging: React.Dispatch<React.SetStateAction<boolean>>;
   dragStartRef: React.MutableRefObject<{ x: number; y: number } | null>;
   isResizing: boolean;
-  handleResizeMouseDown: (e: React.MouseEvent) => void;
+  handleResizeMouseDown: (direction: ResizeDirection) => (e: React.MouseEvent) => void;
   children: React.ReactNode;
 }> = ({
   modalId, title, onClose, position, size, noPadding,
@@ -269,15 +302,25 @@ const MobileOrDraggable: React.FC<{
         {children}
       </div>
 
-      {/* Resize Handle */}
+      {/* Resize handles — edges (invisible, 5px hit area) */}
+      <div onMouseDown={handleResizeMouseDown('n')}  className="absolute top-0 left-3 right-3 h-[5px] cursor-ns-resize" />
+      <div onMouseDown={handleResizeMouseDown('s')}  className="absolute bottom-0 left-3 right-3 h-[5px] cursor-ns-resize" />
+      <div onMouseDown={handleResizeMouseDown('w')}  className="absolute left-0 top-3 bottom-3 w-[5px] cursor-ew-resize" />
+      <div onMouseDown={handleResizeMouseDown('e')}  className="absolute right-0 top-3 bottom-3 w-[5px] cursor-ew-resize" />
+
+      {/* Resize handles — corners (invisible, 8×8 hit area) */}
+      <div onMouseDown={handleResizeMouseDown('nw')} className="absolute top-0 left-0 w-3 h-3 cursor-nwse-resize z-10" />
+      <div onMouseDown={handleResizeMouseDown('ne')} className="absolute top-0 right-0 w-3 h-3 cursor-nesw-resize z-10" />
+      <div onMouseDown={handleResizeMouseDown('sw')} className="absolute bottom-0 left-0 w-3 h-3 cursor-nesw-resize z-10" />
+      <div onMouseDown={handleResizeMouseDown('se')} className="absolute bottom-0 right-0 w-3 h-3 cursor-nwse-resize z-10" />
+
+      {/* Visual indicator — bottom-right triangle */}
       <div
-        onMouseDown={handleResizeMouseDown}
-        className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize bg-gray-600 hover:bg-gray-500 transition-colors"
+        onMouseDown={handleResizeMouseDown('se')}
+        className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize bg-gray-600 hover:bg-gray-500 transition-colors z-10"
         aria-label="Resize modal"
         role="separator"
-        style={{
-          clipPath: 'polygon(100% 0, 100% 100%, 0 100%)'
-        }}
+        style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}
       />
     </div>
   );
