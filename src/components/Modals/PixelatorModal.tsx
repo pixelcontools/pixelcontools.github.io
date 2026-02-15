@@ -55,6 +55,8 @@ const COMMON_HEIGHTS = [
 
 const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer }) => {
   const updateLayer = useCompositorStore((state) => state.updateLayer);
+  const layers = useCompositorStore((state) => state.project.layers);
+  const cropCanvasToLayers = useCompositorStore((state) => state.cropCanvasToLayers);
   const isPortrait = usePortraitMode();
 
   // State
@@ -400,6 +402,10 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
         width: resultDimensions.width,
         height: resultDimensions.height
       });
+      // Auto-crop canvas when there's only one layer
+      if (layers.length === 1) {
+        setTimeout(() => { cropCanvasToLayers(); window.fitCanvasToScreen?.(); }, 50);
+      }
       onClose();
     }
   };

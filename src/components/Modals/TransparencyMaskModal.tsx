@@ -25,6 +25,8 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const updateLayer = useCompositorStore((state) => state.updateLayer);
+  const layers = useCompositorStore((state) => state.project.layers);
+  const cropCanvasToLayers = useCompositorStore((state) => state.cropCanvasToLayers);
 
   useEffect(() => {
     if (!isOpen || !layer.imageData) return;
@@ -50,6 +52,10 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
       try {
         const result = await applyTransparencyMask(layer.imageData, threshold, useTemplatePalette);
         updateLayer(layer.id, { imageData: result });
+        // Auto-crop canvas when there's only one layer
+        if (layers.length === 1) {
+          setTimeout(() => { cropCanvasToLayers(); window.fitCanvasToScreen?.(); }, 50);
+        }
         onClose();
       } catch (error) {
         console.error('Failed to apply transparency mask with palette reduction:', error);

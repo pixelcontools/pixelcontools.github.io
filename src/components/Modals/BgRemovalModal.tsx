@@ -146,6 +146,8 @@ async function applyAlphaMask(originalSrc: string, alphaMask: Uint8Array, w: num
 
 const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer }) => {
   const updateLayer = useCompositorStore((state) => state.updateLayer);
+  const layers = useCompositorStore((state) => state.project.layers);
+  const cropCanvasToLayers = useCompositorStore((state) => state.cropCanvasToLayers);
 
   // Mode & processing state
   const [mode, setMode] = useState<Mode>('click');
@@ -760,6 +762,10 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
   const handleApply = () => {
     if (!workingImage || workingImage === originalImage) return;
     updateLayer(layer.id, { imageData: workingImage });
+    // Auto-crop canvas when there's only one layer
+    if (layers.length === 1) {
+      setTimeout(() => { cropCanvasToLayers(); window.fitCanvasToScreen?.(); }, 50);
+    }
     onClose();
   };
 

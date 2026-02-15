@@ -13,6 +13,8 @@ const MIN_SIZE = 5;
 
 const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
   const updateLayer = useCompositorStore((s) => s.updateLayer);
+  const layers = useCompositorStore((s) => s.project.layers);
+  const cropCanvasToLayers = useCompositorStore((s) => s.cropCanvasToLayers);
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
@@ -228,6 +230,10 @@ const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
     );
     const dataUrl = canvas.toDataURL();
     updateLayer(layer.id, { imageData: dataUrl, width: Math.round(cropRect.width), height: Math.round(cropRect.height) });
+    // Auto-crop canvas when there's only one layer
+    if (layers.length === 1) {
+      setTimeout(() => { cropCanvasToLayers(); window.fitCanvasToScreen?.(); }, 50);
+    }
     onClose();
   };
 
