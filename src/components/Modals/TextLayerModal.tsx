@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import DraggableModal from './DraggableModal';
-import { usePortraitMode } from '../../hooks/usePortraitMode';
 import useCompositorStore from '../../store/compositorStore';
 import { Layer } from '../../types/compositor.types';
-import { ALL_FONTS, SYSTEM_FONTS, detectLocalFonts, preloadAllGoogleFonts } from '../../utils/fonts';
-import type { FontOption } from '../../utils/fonts';
+import { ALL_FONTS, SYSTEM_FONTS } from '../../utils/fonts';
 import { rasterizeText } from '../../utils/textRasterizer';
 
 interface TextLayerModalProps {
@@ -19,7 +17,6 @@ const TextLayerModal: React.FC<TextLayerModalProps> = ({ isOpen, onClose, existi
   const addLayer = useCompositorStore((state) => state.addLayer);
   const updateLayer = useCompositorStore((state) => state.updateLayer);
   const removeLayer = useCompositorStore((state) => state.removeLayer);
-  const isPortrait = usePortraitMode();
   
   // State
   const [text, setText] = useState<string>('Enter your text here');
@@ -42,15 +39,6 @@ const TextLayerModal: React.FC<TextLayerModalProps> = ({ isOpen, onClose, existi
   const dropdownRef = useRef<HTMLDivElement>(null);
   const previewUpdateTimeoutRef = useRef<number | null>(null);
   const originalVisibilityRef = useRef<boolean>(true);
-  const [localFonts, setLocalFonts] = useState<FontOption[]>([]);
-
-  // Detect locally installed fonts and preload Google Fonts on mount
-  useEffect(() => {
-    detectLocalFonts().then(fonts => {
-      if (fonts.length > 0) setLocalFonts(fonts);
-    });
-    preloadAllGoogleFonts();
-  }, []);
   
   // Load existing layer data if editing
   useEffect(() => {
@@ -317,18 +305,16 @@ const TextLayerModal: React.FC<TextLayerModalProps> = ({ isOpen, onClose, existi
   };
   
   // Filter fonts based on search
-  const allAvailableFonts = [...ALL_FONTS, ...localFonts];
-  const filteredFonts = allAvailableFonts.filter(font =>
+  const filteredFonts = ALL_FONTS.filter(font =>
     font.name.toLowerCase().includes(fontSearch.toLowerCase())
   );
   
   // Group filtered fonts by category
   const filteredSystemFonts = filteredFonts.filter(f => f.category === 'system');
-  const filteredLocalFonts = filteredFonts.filter(f => f.category === 'local');
   const filteredGoogleFonts = filteredFonts.filter(f => f.category === 'google');
   
   // Get selected font name for display
-  const selectedFont = allAvailableFonts.find(f => f.value === fontFamily);
+  const selectedFont = ALL_FONTS.find(f => f.value === fontFamily);
   
   return (
     <DraggableModal
@@ -338,9 +324,9 @@ const TextLayerModal: React.FC<TextLayerModalProps> = ({ isOpen, onClose, existi
       noPadding={true}
       modalId="modal-text-layer"
     >
-      <div className={`${isPortrait ? 'flex flex-col-reverse' : 'flex'} text-gray-200 h-full w-full overflow-hidden`}>
-        {/* Controls */}
-        <div className={`${isPortrait ? 'border-t max-h-[45vh]' : 'w-80 border-r'} border-gray-700 flex-shrink-0 flex flex-col overflow-hidden bg-gray-800`}>
+      <div className="flex text-gray-200 h-full w-full overflow-hidden">
+        {/* Left: Controls */}
+        <div className="w-80 border-r border-gray-700 flex-shrink-0 flex flex-col overflow-hidden bg-gray-800">
           <div className="overflow-y-auto flex-1 p-4 space-y-5">
             
             {/* Text Input */}
@@ -395,25 +381,6 @@ const TextLayerModal: React.FC<TextLayerModalProps> = ({ isOpen, onClose, existi
                       <div>
                         <div className="px-2 py-1 text-[10px] font-bold text-gray-500 uppercase bg-gray-800/50">System</div>
                         {filteredSystemFonts.map(font => (
-                          <button
-                            key={font.value}
-                            onClick={() => {
-                              setFontFamily(font.value);
-                              setIsFontDropdownOpen(false);
-                              setFontSearch('');
-                            }}
-                            className={`w-full px-3 py-1.5 text-left text-sm hover:bg-blue-600 hover:text-white ${fontFamily === font.value ? 'bg-blue-600 text-white' : 'text-gray-300'}`}
-                            style={{ fontFamily: font.value }}
-                          >
-                            {font.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {filteredLocalFonts.length > 0 && (
-                      <div>
-                        <div className="px-2 py-1 text-[10px] font-bold text-gray-500 uppercase bg-gray-800/50 border-t border-gray-700">Local ({filteredLocalFonts.length})</div>
-                        {filteredLocalFonts.map(font => (
                           <button
                             key={font.value}
                             onClick={() => {

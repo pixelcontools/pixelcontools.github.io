@@ -4,7 +4,7 @@ import useCompositorStore from '../../store/compositorStore';
 import { Layer } from '../../types/compositor.types';
 import { removeBackground as legacyRemoveBackground } from '../../utils/imageProcessing';
 
-type Mode = 'ai' | 'click' | 'brush';
+type Mode = 'ai' | 'click' | 'brush' | 'lasso';
 
 interface BgRemovalModalProps {
   isOpen: boolean;
@@ -148,7 +148,7 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
   const updateLayer = useCompositorStore((state) => state.updateLayer);
 
   // Mode & processing state
-  const [mode, setMode] = useState<Mode>('ai');
+  const [mode, setMode] = useState<Mode>('click');
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -214,10 +214,16 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const lastBrushPosRef = useRef<{ x: number; y: number } | null>(null);
   const hasInitialFitRef = useRef(false);
   const brushCursorRef = useRef<HTMLDivElement>(null);
   const origImageDataRef = useRef<ImageData | null>(null);
+
+  // Lasso state
+  const [isLassoing, setIsLassoing] = useState(false);
+  const lassoPointsRef = useRef<{ x: number; y: number }[]>([]);
+  const [lassoMode, setLassoMode] = useState<'erase' | 'restore'>('erase');
 
   // ─── Init when modal opens ────────────────────────────────────────────
   useEffect(() => {
@@ -563,11 +569,127 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
     setWorkingImage(result);
   };
 
+  // ─── Lasso handlers ───────────────────────────────────────────────────
+  const drawLassoOverlay = () => {
+    const overlay = overlayCanvasRef.current;
+    const cvs = canvasRef.current;
+    if (!overlay || !cvs) return;
+    overlay.width = cvs.width;
+    overlay.height = cvs.height;
+    const ctx = overlay.getContext('2d')!;
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    const pts = lassoPointsRef.current;
+    if (pts.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    // Draw closing line back to start
+    ctx.lineTo(pts[0].x, pts[0].y);
+    // Fill with semi-transparent overlay
+    ctx.fillStyle = lassoMode === 'erase' ? 'rgba(255, 0, 0, 0.15)' : 'rgba(0, 255, 0, 0.15)';
+    ctx.fill();
+    // Stroke the path
+    ctx.strokeStyle = lassoMode === 'erase' ? 'rgba(255, 80, 80, 0.9)' : 'rgba(80, 255, 80, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.stroke();
+  };
+
+  const handleLassoDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (mode !== 'lasso' || isProcessing) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const pos = getImageCoords(e);
+    if (!pos) return;
+    setIsLassoing(true);
+    lassoPointsRef.current = [pos];
+  };
+
+  const handleLassoMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isLassoing || mode !== 'lasso') return;
+    const pos = getImageCoords(e);
+    if (!pos) return;
+    lassoPointsRef.current.push(pos);
+    drawLassoOverlay();
+  };
+
+  const handleLassoUp = async () => {
+    if (!isLassoing || mode !== 'lasso') return;
+    setIsLassoing(false);
+    const pts = lassoPointsRef.current;
+    if (pts.length < 3 || !imgDim || !workingImage || !originalImage) {
+      lassoPointsRef.current = [];
+      // Clear overlay
+      const overlay = overlayCanvasRef.current;
+      if (overlay) {
+        const ctx = overlay.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
+      }
+      return;
+    }
+
+    const { w, h } = imgDim;
+    const mask = alphaMaskRef.current;
+    if (!mask) return;
+
+    // Build a filled polygon mask using an offscreen canvas
+    const polyCvs = document.createElement('canvas');
+    polyCvs.width = w;
+    polyCvs.height = h;
+    const polyCtx = polyCvs.getContext('2d')!;
+    polyCtx.beginPath();
+    polyCtx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      polyCtx.lineTo(pts[i].x, pts[i].y);
+    }
+    polyCtx.closePath();
+    polyCtx.fillStyle = '#fff';
+    polyCtx.fill();
+    const polyData = polyCtx.getImageData(0, 0, w, h).data;
+
+    // Apply to alpha mask
+    const val = lassoMode === 'erase' ? 0 : 255;
+    for (let i = 0; i < w * h; i++) {
+      if (polyData[i * 4 + 3] > 0) {
+        mask[i] = val;
+      }
+    }
+
+    pushUndo(workingImage);
+    const result = await applyAlphaMask(originalImage, mask, w, h);
+    setWorkingImage(result);
+
+    lassoPointsRef.current = [];
+    // Clear overlay
+    const overlay = overlayCanvasRef.current;
+    if (overlay) {
+      const ctx = overlay.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
+    }
+  };
+
   // ─── Pan handlers (middle-click or right-click) ───────────────────────
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    // Mouse position relative to container
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setZoom(z => Math.max(0.05, Math.min(10, z + delta)));
+    setZoom(prevZoom => {
+      const newZoom = Math.max(0.05, Math.min(10, prevZoom + delta));
+      const scale = newZoom / prevZoom;
+      // Adjust pan so the point under the cursor stays fixed
+      setPan(prev => ({
+        x: mx - scale * (mx - prev.x),
+        y: my - scale * (my - prev.y),
+      }));
+      return newZoom;
+    });
   };
 
   const handlePanStart = (e: React.MouseEvent) => {
@@ -598,6 +720,9 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
     if (mode === 'brush') {
       handleBrushDown(e);
     }
+    if (mode === 'lasso') {
+      handleLassoDown(e);
+    }
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -608,6 +733,9 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
     if (mode === 'brush' && isBrushing) {
       handleBrushMove(e);
     }
+    if (mode === 'lasso' && isLassoing) {
+      handleLassoMove(e);
+    }
   };
 
   const handleCanvasMouseUp = () => {
@@ -617,6 +745,9 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
     }
     if (mode === 'brush') {
       handleBrushUp();
+    }
+    if (mode === 'lasso') {
+      handleLassoUp();
     }
   };
 
@@ -643,6 +774,7 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
     if (isPanning) return 'cursor-grabbing';
     if (mode === 'click') return 'cursor-crosshair';
     if (mode === 'brush') return 'cursor-none';
+    if (mode === 'lasso') return 'cursor-crosshair';
     return 'cursor-default';
   };
 
@@ -653,9 +785,10 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
         {/* Mode tabs */}
         <div className="flex border-b border-gray-700 bg-gray-800/50">
           {([
-            { key: 'ai' as Mode, label: 'AI Auto' },
             { key: 'click' as Mode, label: 'Click Remove' },
+            { key: 'lasso' as Mode, label: 'Lasso' },
             { key: 'brush' as Mode, label: 'Brush Refine' },
+            { key: 'ai' as Mode, label: 'AI Auto' },
           ]).map(({ key, label }) => (
             <button
               key={key}
@@ -747,6 +880,19 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
                 onMouseLeave={handleCanvasMouseUp}
                 style={{ display: 'block', imageRendering: zoom > 2 ? 'pixelated' : 'auto' }}
               />
+              {/* Lasso overlay canvas — sits on top of main canvas */}
+              <canvas
+                ref={overlayCanvasRef}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  pointerEvents: 'none',
+                  imageRendering: zoom > 2 ? 'pixelated' : 'auto',
+                }}
+              />
             </div>
             {/* Brush size cursor overlay — positioned via ref, no React re-renders */}
             <div
@@ -836,6 +982,35 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
             </div>
           )}
 
+          {mode === 'lasso' && (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-400">
+                Draw a freehand selection around an area to erase or restore it. The region fills when you release the mouse.
+              </p>
+              <div className="flex items-center gap-3">
+                <div className="flex rounded overflow-hidden border border-gray-600">
+                  <button
+                    onClick={() => setLassoMode('erase')}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                      lassoMode === 'erase' ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Erase
+                  </button>
+                  <button
+                    onClick={() => setLassoMode('restore')}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                      lassoMode === 'restore' ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Restore
+                  </button>
+                </div>
+                <span className="text-xs text-gray-500">Draw around an area, then release to apply</span>
+              </div>
+            </div>
+          )}
+
           {mode === 'brush' && (
             <div className="space-y-2">
               <p className="text-xs text-gray-400">
@@ -862,7 +1037,7 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
                 </div>
                 <label className="text-xs text-gray-400 whitespace-nowrap">Size: {brushSize}px</label>
                 <input
-                  type="range" min="2" max="100" value={brushSize}
+                  type="range" min="1" max="100" value={brushSize}
                   onChange={e => setBrushSize(Number(e.target.value))}
                   className="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
                 />

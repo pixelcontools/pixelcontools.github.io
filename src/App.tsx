@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Canvas from './components/Canvas/Canvas';
 import LayerPanel from './components/LayerPanel/LayerPanel';
 import PropertyPanel from './components/PropertyPanel/PropertyPanel';
@@ -98,6 +98,92 @@ function App() {
 
   // Initialize auto-reset zoom when first layer is added
   useAutoResetZoom();
+
+  // ─── Global drag-and-drop for image files ─────────────────────────────
+  const [isDroppingFile, setIsDroppingFile] = useState(false);
+
+  const handleDroppedFiles = useCallback(async (files: FileList) => {
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) continue;
+      try {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = () => reject(new Error('Failed to read file'));
+          reader.readAsDataURL(file);
+        });
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error('Failed to load image'));
+        });
+        const store = useCompositorStore.getState();
+        store.addLayer({
+          name: file.name,
+          imageData: dataUrl,
+          x: 0,
+          y: 0,
+          zIndex: store.project.layers.length,
+          visible: true,
+          locked: false,
+          opacity: 1.0,
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+        });
+        // Select the newly added layer
+        const layers = useCompositorStore.getState().project.layers;
+        if (layers.length > 0) {
+          useCompositorStore.getState().selectLayer(layers[layers.length - 1].id, false);
+        }
+      } catch (err) {
+        console.error(`Error loading dropped image ${file.name}:`, err);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    let counter = 0;
+
+    const onDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      counter++;
+      if (e.dataTransfer?.types.includes('Files')) {
+        setIsDroppingFile(true);
+      }
+    };
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    };
+    const onDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      counter--;
+      if (counter <= 0) {
+        counter = 0;
+        setIsDroppingFile(false);
+      }
+    };
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      counter = 0;
+      setIsDroppingFile(false);
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        handleDroppedFiles(e.dataTransfer.files);
+      }
+    };
+
+    window.addEventListener('dragenter', onDragEnter);
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('dragleave', onDragLeave);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter);
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('dragleave', onDragLeave);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, [handleDroppedFiles]);
 
   // Initialize debug menu
   const { isOpen: isDebugMenuOpen, setIsOpen: setIsDebugMenuOpen } = useDebugMenu();
@@ -269,6 +355,17 @@ function App() {
         isOpen={showTutorial}
         onClose={() => setShowTutorial(false)}
       />
+
+      {/* File drop overlay */}
+      {isDroppingFile && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center pointer-events-none">
+          <div className="border-4 border-dashed border-blue-400 rounded-2xl px-12 py-10 bg-gray-900/80 text-center">
+            <div className="text-5xl mb-3">📂</div>
+            <div className="text-xl font-semibold text-blue-300">Drop image(s) to add as layers</div>
+            <div className="text-sm text-gray-400 mt-1">PNG, JPG, GIF, WebP, SVG</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

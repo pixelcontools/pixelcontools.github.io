@@ -124,7 +124,7 @@ function PropertyPanel() {
                       className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-slate-700 hover:text-white"
                       aria-label="Open background removal"
                     >
-                      BG Removal (Experimental)
+                      BG Removal
                     </button>
                   </div>
                 )}

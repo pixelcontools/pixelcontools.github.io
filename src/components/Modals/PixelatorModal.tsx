@@ -20,6 +20,17 @@ const WPLACE_PALETTE = [
   "#000000", "#3c3c3c", "#787878", "#aaaaaa", "#d2d2d2", "#ffffff", "#600018", "#a50e1e", "#ed1c24", "#fa8072", "#e45c1a", "#ff7f27", "#f6aa09", "#f9dd3b", "#fffabc", "#9c8431", "#c5ad31", "#e8d45f", "#4a6b3a", "#5a944a", "#84c573", "#0eb968", "#13e67b", "#87ff5e", "#0c816e", "#10aea6", "#13e1be", "#0f799f", "#60f7f2", "#bbfaf2", "#28509e", "#4093e4", "#7dc7ff", "#4d31b8", "#6b50f6", "#99b1fb", "#4a4284", "#7a71c4", "#b5aef1", "#780c99", "#aa38b9", "#e09ff9", "#cb007a", "#ec1f80", "#f38da9", "#9b5249", "#d18078", "#fab6a4", "#684634", "#95682a", "#dba463", "#7b6352", "#9c846b", "#d6b594", "#d18051", "#f8b277", "#ffc5a5", "#6d643f", "#948c6b", "#cdc59e", "#333941", "#6d758d", "#b3b9d1"
 ];
 
+const WPLACE_FREE_PALETTE = [
+  "#000000", "#3c3c3c", "#787878", "#d2d2d2", "#ffffff", "#600018", "#ed1c24", "#ff7f27", "#f6aa09", "#f9dd3b", "#fffabc", "#0eb968", "#13e67b", "#87ff5e", "#0c816e", "#10aea6", "#13e1be", "#60f7f2", "#28509e", "#4093e4", "#6b50f6", "#99b1fb", "#780c99", "#aa38b9", "#e09ff9", "#cb007a", "#ec1f80", "#f38da9", "#684634", "#95682a", "#f8b277"
+];
+
+const COLOR_MATCH_ALGORITHMS = [
+  { value: 'oklab', label: 'OKLab (perceptual)', desc: 'Modern perceptual — best all-round accuracy' },
+  { value: 'ciede2000', label: 'CIEDE2000', desc: 'Gold standard — great for skin tones and gradients' },
+  { value: 'cie94', label: 'CIE94 (graphics)', desc: 'Industry standard — weights chroma/hue over lightness' },
+  { value: 'cie76', label: 'CIE76 (euclidean)', desc: 'Simple Euclidean in Lab space — fast but less accurate' },
+];
+
 const DITHER_ALGORITHMS = [
   { value: 'none', label: 'None (Nearest Color)' },
   { value: 'floyd-steinberg', label: 'Floyd-Steinberg' },
@@ -52,7 +63,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const [ditherStrength, setDitherStrength] = useState<number>(100);
   const [preprocessingMethod, setPreprocessingMethod] = useState<'none' | 'bilateral' | 'kuwahara' | 'median'>('none');
   const [preprocessingStrength, setPreprocessingStrength] = useState<number>(50);
-  const [paletteMode, setPaletteMode] = useState<'geopixels' | 'wplace' | 'custom' | 'geopixels+custom' | 'none'>('geopixels');
+  const [paletteMode, setPaletteMode] = useState<'geopixels' | 'wplace' | 'wplace-free' | 'custom' | 'geopixels+custom' | 'none'>('geopixels');
   const [customPaletteInput, setCustomPaletteInput] = useState<string>('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [resultDimensions, setResultDimensions] = useState<{ width: number; height: number } | null>(null);
@@ -82,6 +93,8 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const [brightness, setBrightness] = useState<number>(0);
   const [contrast, setContrast] = useState<number>(0);
   const [saturation, setSaturation] = useState<number>(0);
+  const [colorMatchAlgorithm, setColorMatchAlgorithm] = useState<string>('oklab');
+  const [preserveDetailThreshold, setPreserveDetailThreshold] = useState<number>(0);
 
   // Eyedropper modal state
   const [isEyedropperOpen, setIsEyedropperOpen] = useState<boolean>(false);
@@ -212,6 +225,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     if (paletteMode === 'none') return [];
     if (paletteMode === 'geopixels') return GEOPIXELS_PALETTE;
     if (paletteMode === 'wplace') return WPLACE_PALETTE;
+    if (paletteMode === 'wplace-free') return WPLACE_FREE_PALETTE;
 
     // Parse custom input
     const rawInput = customPaletteInput.trim();
@@ -326,13 +340,15 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           preprocessingMethod,
           preprocessingStrength,
           filterTrivialColors,
+          colorMatchAlgorithm,
+          preserveDetailThreshold,
           colorStats: filterTrivialColors ? Array.from(colorStats.entries()).map(([c, s]) => ({ color: c, percent: s.percent })) : []
         }
       });
     };
     img.src = layer.imageData;
 
-  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors]);
+  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, colorMatchAlgorithm, preserveDetailThreshold]);
 
   // Debounced Effect
   useEffect(() => {
@@ -361,6 +377,8 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     preprocessingMethod,
     preprocessingStrength,
     filterTrivialColors,
+    colorMatchAlgorithm,
+    preserveDetailThreshold,
     processImage
   ]);
 
@@ -621,6 +639,19 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                   <option value="lanczos">Lanczos (High Quality)</option>
                 </select>
               </div>
+              <div>
+                <label className="text-xs text-gray-500">Color Matching</label>
+                <select
+                  value={colorMatchAlgorithm}
+                  onChange={(e) => { debounceTimeRef.current = 100; setColorMatchAlgorithm(e.target.value); }}
+                  className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
+                  title={COLOR_MATCH_ALGORITHMS.find(a => a.value === colorMatchAlgorithm)?.desc}
+                >
+                  {COLOR_MATCH_ALGORITHMS.map(a => (
+                    <option key={a.value} value={a.value}>{a.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Semi-Transparent Warning */}
@@ -662,10 +693,19 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                   <input
                     type="radio"
                     name="palette"
+                    checked={paletteMode === 'wplace-free'}
+                    onChange={() => { debounceTimeRef.current = 100; setPaletteMode('wplace-free'); }}
+                  />
+                  <span className="text-sm">WPlace Free <span className="text-gray-500 text-xs">(31 colors)</span></span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="palette"
                     checked={paletteMode === 'wplace'}
                     onChange={() => { debounceTimeRef.current = 100; setPaletteMode('wplace'); }}
                   />
-                  <span className="text-sm">WPlace Base</span>
+                  <span className="text-sm">WPlace All <span className="text-gray-500 text-xs">(63 colors)</span></span>
                 </label>
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
@@ -1076,6 +1116,34 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                       onChange={(e) => setSaturation(Number(e.target.value))}
                       className="w-full"
                     />
+                  </div>
+                  <div className="border-t border-gray-700 pt-3">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Preserve Detail</span>
+                      <div className="flex items-center gap-2">
+                        <span>ΔE≤{preserveDetailThreshold.toFixed(1)}</span>
+                        <button
+                          onClick={() => setPreserveDetailThreshold(0)}
+                          className="text-gray-500 hover:text-white disabled:opacity-0 transition-opacity"
+                          title="Reset Preserve Detail"
+                          disabled={preserveDetailThreshold === 0}
+                        >
+                          ↺
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="5"
+                      step="0.1"
+                      value={preserveDetailThreshold}
+                      onChange={(e) => { debounceTimeRef.current = 100; setPreserveDetailThreshold(Number(e.target.value)); }}
+                      className="w-full"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Pixels within this ΔE threshold keep their original color instead of snapping to palette. Higher = more detail preserved.
+                    </p>
                   </div>
                 </div>
               )}

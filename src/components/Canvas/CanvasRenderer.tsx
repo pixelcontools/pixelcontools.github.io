@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import useCompositorStore from '../../store/compositorStore';
 import GridOverlay from './GridOverlay';
 import DragInfoTooltip from './DragInfoTooltip';
-import { usePortraitMode } from '../../hooks/usePortraitMode';
 
 /**
  * Canvas renderer component
@@ -36,7 +35,6 @@ function CanvasRenderer() {
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [hoverCoords, setHoverCoords] = useState<{ x: number; y: number } | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const isPortrait = usePortraitMode();
 
   /**
    * Decode base64 image data and cache it
@@ -400,110 +398,17 @@ function CanvasRenderer() {
     setViewport({ zoom: newZoom });
   };
 
-  // --- Touch gesture support (pinch-to-zoom + single-finger pan) ---
-  const touchStateRef = useRef<{
-    lastTouchDist: number;
-    lastTouchCenter: { x: number; y: number };
-    isTouching: boolean;
-    singleTouch: boolean;
-  }>({ lastTouchDist: 0, lastTouchCenter: { x: 0, y: 0 }, isTouching: false, singleTouch: false });
-
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      touchStateRef.current.lastTouchDist = Math.hypot(dx, dy);
-      touchStateRef.current.lastTouchCenter = {
-        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
-        y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
-      };
-      touchStateRef.current.isTouching = true;
-      touchStateRef.current.singleTouch = false;
-    } else if (e.touches.length === 1) {
-      touchStateRef.current.lastTouchCenter = {
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY,
-      };
-      touchStateRef.current.singleTouch = true;
-      touchStateRef.current.isTouching = true;
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length === 2 && touchStateRef.current.isTouching) {
-      e.preventDefault();
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.hypot(dx, dy);
-      const center = {
-        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
-        y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
-      };
-
-      const prevDist = touchStateRef.current.lastTouchDist;
-      const prevCenter = touchStateRef.current.lastTouchCenter;
-
-      // Pinch zoom
-      if (prevDist > 0) {
-        const scale = dist / prevDist;
-        const currentZoom = project.viewport.zoom;
-        const newZoom = Math.max(10, Math.min(3200, Math.round(currentZoom * scale)));
-        if (newZoom !== currentZoom) {
-          setViewport({ zoom: newZoom });
-        }
-      }
-
-      // Two-finger pan
-      const panDx = center.x - prevCenter.x;
-      const panDy = center.y - prevCenter.y;
-      const zoom = project.viewport.zoom / 100;
-      setViewport({
-        panX: project.viewport.panX - panDx / zoom,
-        panY: project.viewport.panY - panDy / zoom,
-      });
-
-      touchStateRef.current.lastTouchDist = dist;
-      touchStateRef.current.lastTouchCenter = center;
-      touchStateRef.current.singleTouch = false;
-    } else if (e.touches.length === 1 && touchStateRef.current.singleTouch) {
-      // Single-finger pan
-      const touch = e.touches[0];
-      const prevCenter = touchStateRef.current.lastTouchCenter;
-      const dx = touch.clientX - prevCenter.x;
-      const dy = touch.clientY - prevCenter.y;
-      const zoom = project.viewport.zoom / 100;
-
-      setViewport({
-        panX: project.viewport.panX - dx / zoom,
-        panY: project.viewport.panY - dy / zoom,
-      });
-
-      touchStateRef.current.lastTouchCenter = { x: touch.clientX, y: touch.clientY };
-    }
-  };
-
-  const handleTouchEnd = () => {
-    touchStateRef.current.isTouching = false;
-    touchStateRef.current.singleTouch = false;
-    touchStateRef.current.lastTouchDist = 0;
-  };
-
   return (
     <div
       ref={containerRef}
       id="canvas-renderer"
-      className="relative w-full h-full bg-canvas-bg overflow-hidden cursor-crosshair touch-none"
+      className="relative w-full h-full bg-canvas-bg overflow-hidden cursor-crosshair"
       style={{ paddingTop: '20px', paddingLeft: '20px' }}
       onMouseDown={handleCanvasMouseDown}
       onMouseMove={handleCanvasMouseMove}
       onMouseUp={handleCanvasMouseUp}
       onMouseLeave={handleCanvasMouseUp}
       onWheel={handleCanvasWheel}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
     >
       {/* Canvas container with centering and scrollbars */}
       <div
@@ -566,19 +471,6 @@ function CanvasRenderer() {
                 const isShapeLayer = layer.shapeType !== undefined;
                 const showEditIcon = (isTextLayer || isShapeLayer) && selectedLayerIds.length === 1;
 
-                // Scale icons inversely with zoom so they stay a constant screen size
-                // iconScale converts from screen-px to SVG-px; all offsets are in screen-px
-                const iconScale = 100 / project.viewport.zoom;
-                const baseSize = 1.7; // 30% bigger than original
-                const s = iconScale * baseSize; // combined scale for icon <g>
-                const strokeW = 0.25 * iconScale;
-
-                // Icon positions: fixed screen-pixel offsets, converted to SVG coords once
-                const icon0X = x + 4 * iconScale;
-                const icon1X = x + 18 * iconScale;
-                const icon2X = x + 32 * iconScale;
-                const iconsY = y - 14 * iconScale;
-
                 return (
                   <g key={layer.id}>
                     {/* Light gray stripe */}
@@ -589,8 +481,8 @@ function CanvasRenderer() {
                       height={layer.height+0.3}
                       fill="none"
                       stroke="#b0b0b0"
-                      strokeWidth={strokeW}
-                      strokeDasharray={`${4 * iconScale},${4 * iconScale}`}
+                      strokeWidth="0.25"
+                      strokeDasharray="4,4"
                       style={{
                         animation: borderAnimationSpeed > 0 ? `marching-ants ${8 / (0.125 * borderAnimationSpeed) / 1000}s linear infinite` : 'none',
                       }}
@@ -603,9 +495,9 @@ function CanvasRenderer() {
                       height={layer.height+0.3}
                       fill="none"
                       stroke="#505050"
-                      strokeWidth={strokeW}
-                      strokeDasharray={`${4 * iconScale},${4 * iconScale}`}
-                      strokeDashoffset={2 * iconScale}
+                      strokeWidth="0.25"
+                      strokeDasharray="4,4"
+                      strokeDashoffset="2"
                       style={{
                         animation: borderAnimationSpeed > 0 ? `marching-ants ${8 / (0.125 * borderAnimationSpeed) / 1000}s linear infinite` : 'none',
                       }}
@@ -615,7 +507,7 @@ function CanvasRenderer() {
                     {showSelectionTools && selectedLayerIds.includes(layer.id) && selectedLayerIds.length === 1 && (
                       <g
                         className="selection-tool-icon"
-                        transform={`translate(${icon0X}, ${iconsY}) scale(${s})`}
+                        transform={`translate(${x + 4}, ${y - 14})`}
                         style={{ cursor: 'pointer', pointerEvents: 'auto' }}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -640,7 +532,7 @@ function CanvasRenderer() {
                     {showSelectionTools && selectedLayerIds.includes(layer.id) && selectedLayerIds.length === 1 && (
                       <g
                         className="selection-tool-icon"
-                        transform={`translate(${icon1X}, ${iconsY}) scale(${s})`}
+                        transform={`translate(${x + 14}, ${y - 14})`}
                         style={{ cursor: 'pointer', pointerEvents: 'auto' }}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -671,7 +563,7 @@ function CanvasRenderer() {
                     {showSelectionTools && showEditIcon && (
                       <g
                         className="selection-tool-icon"
-                        transform={`translate(${icon2X}, ${iconsY}) scale(${s})`}
+                        transform={`translate(${x + 24}, ${y - 14})`}
                         style={{ cursor: 'pointer', pointerEvents: 'auto' }}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -703,7 +595,7 @@ function CanvasRenderer() {
                     stroke-dashoffset: 0;
                   }
                   100% {
-                    stroke-dashoffset: ${-8 * (100 / project.viewport.zoom)};
+                    stroke-dashoffset: -8;
                   }
                 }
                 .selection-tool-icon {
@@ -732,7 +624,7 @@ function CanvasRenderer() {
       </div>
 
       {/* Coordinate Display */}
-      <div id="canvas-status-bar" className={`absolute bottom-4 ${isPortrait ? 'left-16' : 'right-4'} bg-panel-bg border border-border rounded px-3 py-2 text-xs text-gray-400 space-y-1`} aria-label="Canvas status">
+      <div id="canvas-status-bar" className="absolute bottom-4 right-4 bg-panel-bg border border-border rounded px-3 py-2 text-xs text-gray-400 space-y-1" aria-label="Canvas status">
         <div>Canvas: {project.canvas.width}x{project.canvas.height}</div>
         <div>Zoom: {project.viewport.zoom}%</div>
         <div>Layers: {project.layers.length}</div>

@@ -50,7 +50,7 @@ const DESKTOP_STEPS: TutorialStep[] = [
   {
     target: '[data-region="actions-menu"]',
     title: 'Actions Menu',
-    description: 'With a layer selected, open Modify to access powerful tools:\n\n• Transparency Masking — Remove a chosen color and make it transparent.\n• Pixelator — Convert any image into pixel art with palette matching and dithering.\n• Crop — Trim the layer to a smaller region.\n• BG Removal — Experimental flood-fill background removal.',
+    description: 'With a layer selected, open Modify to access powerful tools:\n\n• Transparency Masking — Remove a chosen color and make it transparent.\n• Pixelator — Convert any image into pixel art with palette matching and dithering.\n• Crop — Trim the layer to a smaller region.\n• BG Removal — Remove backgrounds with click, brush, or AI tools.',
     placement: 'left',
   },
   {
@@ -114,7 +114,7 @@ const MOBILE_STEPS: TutorialStep[] = [
   {
     target: null,
     title: 'Actions Menu',
-    description: 'With a layer selected, open Properties (⚙) and tap Modify to access:\n\n• Transparency Masking — Remove a color and make it transparent.\n• Pixelator — Convert images to pixel art with palette matching and dithering.\n• Crop — Trim the layer to a smaller region.\n• BG Removal — Experimental flood-fill background removal.',
+    description: 'With a layer selected, open Properties (⚙) and tap Modify to access:\n\n• Transparency Masking — Remove a color and make it transparent.\n• Pixelator — Convert images to pixel art with palette matching and dithering.\n• Crop — Trim the layer to a smaller region.\n• BG Removal — Remove backgrounds with click, brush, or AI tools.',
     placement: 'center',
   },
   {

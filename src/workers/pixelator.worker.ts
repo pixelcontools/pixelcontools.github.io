@@ -8,8 +8,15 @@ const WPLACE_PALETTE = [
   "#000000","#3c3c3c","#787878","#aaaaaa","#d2d2d2","#ffffff","#600018","#a50e1e","#ed1c24","#fa8072","#e45c1a","#ff7f27","#f6aa09","#f9dd3b","#fffabc","#9c8431","#c5ad31","#e8d45f","#4a6b3a","#5a944a","#84c573","#0eb968","#13e67b","#87ff5e","#0c816e","#10aea6","#13e1be","#0f799f","#60f7f2","#bbfaf2","#28509e","#4093e4","#7dc7ff","#4d31b8","#6b50f6","#99b1fb","#4a4284","#7a71c4","#b5aef1","#780c99","#aa38b9","#e09ff9","#cb007a","#ec1f80","#f38da9","#9b5249","#d18078","#fab6a4","#684634","#95682a","#dba463","#7b6352","#9c846b","#d6b594","#d18051","#f8b277","#ffc5a5","#6d643f","#948c6b","#cdc59e","#333941","#6d758d","#b3b9d1"
 ];
 
+const WPLACE_FREE_PALETTE = [
+  "#000000","#3c3c3c","#787878","#d2d2d2","#ffffff","#600018","#ed1c24","#ff7f27","#f6aa09","#f9dd3b","#fffabc","#0eb968","#13e67b","#87ff5e","#0c816e","#10aea6","#13e1be","#60f7f2","#28509e","#4093e4","#6b50f6","#99b1fb","#780c99","#aa38b9","#e09ff9","#cb007a","#ec1f80","#f38da9","#684634","#95682a","#f8b277"
+];
+
+type ColorMatchAlgorithm = 'oklab' | 'ciede2000' | 'cie94' | 'cie76';
+
 interface RGB { r: number; g: number; b: number; }
 interface LAB { l: number; a: number; b: number; }
+interface OKLabColor { L: number; a: number; b: number; }
 
 // --- Color Conversion & Distance ---
 
@@ -60,12 +67,135 @@ function rgbToLab(c: RGB): LAB {
   return xyzToLab(rgbToXyz(c));
 }
 
-function getDeltaE(labA: LAB, labB: LAB): number {
-  const deltaL = labA.l - labB.l;
-  const deltaA = labA.a - labB.a;
-  const deltaB = labA.b - labB.b;
-  return Math.sqrt(deltaL * deltaL + deltaA * deltaA + deltaB * deltaB);
+// --- OKLab Color Space ---
+
+function rgbToOklab(c: RGB): OKLabColor {
+  // sRGB → linear sRGB
+  let r = c.r / 255;
+  let g = c.g / 255;
+  let b = c.b / 255;
+  r = r >= 0.04045 ? Math.pow((r + 0.055) / 1.055, 2.4) : r / 12.92;
+  g = g >= 0.04045 ? Math.pow((g + 0.055) / 1.055, 2.4) : g / 12.92;
+  b = b >= 0.04045 ? Math.pow((b + 0.055) / 1.055, 2.4) : b / 12.92;
+
+  // linear sRGB → LMS (using Oklab M1 matrix)
+  const l_ = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+  const m_ = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+  const s_ = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+
+  // LMS → LMS^(1/3)
+  const l3 = Math.cbrt(l_);
+  const m3 = Math.cbrt(m_);
+  const s3 = Math.cbrt(s_);
+
+  // LMS^(1/3) → OKLab
+  return {
+    L: 0.2104542553 * l3 + 0.7936177850 * m3 - 0.0040720468 * s3,
+    a: 1.9779984951 * l3 - 2.4285922050 * m3 + 0.4505937099 * s3,
+    b: 0.0259040371 * l3 + 0.7827717662 * m3 - 0.8086757660 * s3,
+  };
 }
+
+// --- Color Distance Functions ---
+
+/** CIE76: simple Euclidean in CIELAB */
+function deltaE_CIE76(labA: LAB, labB: LAB): number {
+  const dL = labA.l - labB.l;
+  const da = labA.a - labB.a;
+  const db = labA.b - labB.b;
+  return Math.sqrt(dL * dL + da * da + db * db);
+}
+
+/** CIE94: weighted Euclidean in CIELAB (graphics arts) */
+function deltaE_CIE94(labA: LAB, labB: LAB): number {
+  const dL = labA.l - labB.l;
+  const C1 = Math.sqrt(labA.a * labA.a + labA.b * labA.b);
+  const C2 = Math.sqrt(labB.a * labB.a + labB.b * labB.b);
+  const dC = C1 - C2;
+  const da = labA.a - labB.a;
+  const db = labA.b - labB.b;
+  let dH2 = da * da + db * db - dC * dC;
+  if (dH2 < 0) dH2 = 0;
+  const dH = Math.sqrt(dH2);
+  // Graphic arts application constants
+  const kL = 1, K1 = 0.045, K2 = 0.015;
+  const SL = 1;
+  const SC = 1 + K1 * C1;
+  const SH = 1 + K2 * C1;
+  const t1 = dL / (kL * SL);
+  const t2 = dC / SC;
+  const t3 = dH / SH;
+  return Math.sqrt(t1 * t1 + t2 * t2 + t3 * t3);
+}
+
+/** CIEDE2000: the gold standard perceptual color difference */
+function deltaE_CIEDE2000(labA: LAB, labB: LAB): number {
+  const L1 = labA.l, a1 = labA.a, b1 = labA.b;
+  const L2 = labB.l, a2 = labB.a, b2 = labB.b;
+
+  const C1 = Math.sqrt(a1 * a1 + b1 * b1);
+  const C2 = Math.sqrt(a2 * a2 + b2 * b2);
+  const avgC = (C1 + C2) / 2;
+
+  const avgC7 = Math.pow(avgC, 7);
+  const G = 0.5 * (1 - Math.sqrt(avgC7 / (avgC7 + 6103515625))); // 25^7
+  const a1p = a1 * (1 + G);
+  const a2p = a2 * (1 + G);
+  const C1p = Math.sqrt(a1p * a1p + b1 * b1);
+  const C2p = Math.sqrt(a2p * a2p + b2 * b2);
+  const avgCp = (C1p + C2p) / 2;
+
+  let h1p = Math.atan2(b1, a1p) * (180 / Math.PI); if (h1p < 0) h1p += 360;
+  let h2p = Math.atan2(b2, a2p) * (180 / Math.PI); if (h2p < 0) h2p += 360;
+
+  let dLp = L2 - L1;
+  let dCp = C2p - C1p;
+  let dhp: number;
+  if (C1p * C2p === 0) { dhp = 0; }
+  else if (Math.abs(h2p - h1p) <= 180) { dhp = h2p - h1p; }
+  else if (h2p - h1p > 180) { dhp = h2p - h1p - 360; }
+  else { dhp = h2p - h1p + 360; }
+  const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin((dhp * Math.PI / 180) / 2);
+
+  const avgLp = (L1 + L2) / 2;
+  let avgHp: number;
+  if (C1p * C2p === 0) { avgHp = h1p + h2p; }
+  else if (Math.abs(h1p - h2p) <= 180) { avgHp = (h1p + h2p) / 2; }
+  else if (h1p + h2p < 360) { avgHp = (h1p + h2p + 360) / 2; }
+  else { avgHp = (h1p + h2p - 360) / 2; }
+
+  const T = 1
+    - 0.17 * Math.cos((avgHp - 30) * Math.PI / 180)
+    + 0.24 * Math.cos((2 * avgHp) * Math.PI / 180)
+    + 0.32 * Math.cos((3 * avgHp + 6) * Math.PI / 180)
+    - 0.20 * Math.cos((4 * avgHp - 63) * Math.PI / 180);
+
+  const SL = 1 + (0.015 * (avgLp - 50) * (avgLp - 50)) / Math.sqrt(20 + (avgLp - 50) * (avgLp - 50));
+  const SC = 1 + 0.045 * avgCp;
+  const SH = 1 + 0.015 * avgCp * T;
+
+  const avgCp7 = Math.pow(avgCp, 7);
+  const RT = -2 * Math.sqrt(avgCp7 / (avgCp7 + 6103515625))
+    * Math.sin(60 * Math.PI / 180 * Math.exp(-((avgHp - 275) / 25) * ((avgHp - 275) / 25)));
+
+  const tL = dLp / SL;
+  const tC = dCp / SC;
+  const tH = dHp / SH;
+
+  return Math.sqrt(tL * tL + tC * tC + tH * tH + RT * tC * tH);
+}
+
+/** OKLab: Euclidean distance in OKLab space (modern perceptual) */
+function deltaE_OKLab(a: OKLabColor, b: OKLabColor): number {
+  const dL = a.L - b.L;
+  const da = a.a - b.a;
+  const db = a.b - b.b;
+  // Scale by 100 to make values comparable to CIELAB ΔE range
+  return Math.sqrt(dL * dL + da * da + db * db) * 100;
+}
+
+// Alias for backward compat
+const getDeltaE = deltaE_CIE76;
 
 // --- Resizing ---
 
@@ -346,29 +476,59 @@ const errorKernels: Record<string, { dx: number, dy: number, f: number }[]> = {
     ]
 };
 
-function findClosestColor(pixel: RGB, palette: RGB[], paletteLab: LAB[]): RGB {
-    // Use CIELAB for better perceptual matching
-    const pixelLab = rgbToLab(pixel);
+interface FindClosestResult { color: RGB; dist: number; }
+
+function findClosestColor(
+  pixel: RGB,
+  palette: RGB[],
+  paletteLab: LAB[],
+  paletteOklab: OKLabColor[] | null,
+  algorithm: ColorMatchAlgorithm,
+  preserveDetailThreshold: number,
+): FindClosestResult {
     let minDist = Infinity;
     let closest = palette[0];
 
-    for (let i = 0; i < palette.length; i++) {
-        const dist = getDeltaE(pixelLab, paletteLab[i]);
-        if (dist < minDist) {
-            minDist = dist;
-            closest = palette[i];
-        }
+    if (algorithm === 'oklab') {
+      const pixelOk = rgbToOklab(pixel);
+      for (let i = 0; i < palette.length; i++) {
+        const dist = deltaE_OKLab(pixelOk, paletteOklab![i]);
+        if (dist < minDist) { minDist = dist; closest = palette[i]; }
+      }
+    } else {
+      const pixelLab = rgbToLab(pixel);
+      const distFn = algorithm === 'ciede2000' ? deltaE_CIEDE2000
+                   : algorithm === 'cie94'     ? deltaE_CIE94
+                   :                             deltaE_CIE76;
+      for (let i = 0; i < palette.length; i++) {
+        const dist = distFn(pixelLab, paletteLab[i]);
+        if (dist < minDist) { minDist = dist; closest = palette[i]; }
+      }
     }
-    return closest;
+
+    // Preserve detail: if the closest color is within the threshold, keep original pixel
+    if (preserveDetailThreshold > 0 && minDist <= preserveDetailThreshold) {
+      return { color: pixel, dist: 0 };
+    }
+
+    return { color: closest, dist: minDist };
 }
 
-function applyDithering(imageData: ImageData, paletteHex: string[], algorithm: string, strength: number) {
+function applyDithering(
+  imageData: ImageData,
+  paletteHex: string[],
+  algorithm: string,
+  strength: number,
+  colorMatchAlgorithm: ColorMatchAlgorithm = 'oklab',
+  preserveDetailThreshold: number = 0,
+) {
     const pixels = imageData.data;
     const width = imageData.width;
     const height = imageData.height;
     
     const paletteRGB = paletteHex.map(hexToRgb);
     const paletteLab = paletteRGB.map(rgbToLab);
+    const paletteOklab = colorMatchAlgorithm === 'oklab' ? paletteRGB.map(rgbToOklab) : null;
 
     const strengthFactor = strength / 100;
 
@@ -398,7 +558,7 @@ function applyDithering(imageData: ImageData, paletteHex: string[], algorithm: s
                     b: Math.max(0, Math.min(255, pixels[index + 2] + nudge))
                 };
 
-                const newColor = findClosestColor(oldColor, paletteRGB, paletteLab);
+                const { color: newColor } = findClosestColor(oldColor, paletteRGB, paletteLab, paletteOklab, colorMatchAlgorithm, preserveDetailThreshold);
 
                 pixels[index] = newColor.r;
                 pixels[index + 1] = newColor.g;
@@ -422,7 +582,7 @@ function applyDithering(imageData: ImageData, paletteHex: string[], algorithm: s
                     b: pixelDataFloat[index + 2] 
                 };
                 
-                const newColor = findClosestColor(oldColor, paletteRGB, paletteLab);
+                const { color: newColor } = findClosestColor(oldColor, paletteRGB, paletteLab, paletteOklab, colorMatchAlgorithm, preserveDetailThreshold);
 
                 pixels[index] = newColor.r;
                 pixels[index + 1] = newColor.g;
@@ -902,7 +1062,9 @@ self.onmessage = async (e: MessageEvent) => {
         return;
     }
 
-    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, colorStats } = settings;
+    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, colorStats, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT } = settings;
+    const colorMatchAlgorithm: ColorMatchAlgorithm = rawAlgo || 'oklab';
+    const preserveDetailThreshold: number = rawPDT || 0;
 
     try {
         // Filter out trivial colors if enabled
@@ -978,11 +1140,12 @@ self.onmessage = async (e: MessageEvent) => {
                 );
 
                 const paletteLab = paletteRGB.map(rgbToLab);
+                const paletteOk = colorMatchAlgorithm === 'oklab' ? paletteRGB.map(rgbToOklab) : null;
 
                 for (let i = 0; i < pixels.length; i += 4) {
                     if (pixels[i + 3] > 128) {
                         const pixelColor = { r: pixels[i], g: pixels[i + 1], b: pixels[i + 2] };
-                        const closestColor = findClosestColor(pixelColor, paletteRGB, paletteLab);
+                        const { color: closestColor } = findClosestColor(pixelColor, paletteRGB, paletteLab, paletteOk, colorMatchAlgorithm, 0);
                         pixels[i] = closestColor.r;
                         pixels[i + 1] = closestColor.g;
                         pixels[i + 2] = closestColor.b;
@@ -993,7 +1156,7 @@ self.onmessage = async (e: MessageEvent) => {
 
         // 3. Dither
         if (effectivePalette && effectivePalette.length > 0) {
-            applyDithering(resizedImageData, effectivePalette, ditherMethod, ditherStrength);
+            applyDithering(resizedImageData, effectivePalette, ditherMethod, ditherStrength, colorMatchAlgorithm, preserveDetailThreshold);
         }
 
         self.postMessage({ type: 'success', imageData: resizedImageData, generatedPalette });
