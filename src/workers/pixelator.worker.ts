@@ -1109,7 +1109,7 @@ self.onmessage = async (e: MessageEvent) => {
         return;
     }
 
-    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, colorStats, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT } = settings;
+    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, colorStats, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT } = settings;
     const colorMatchAlgorithm: ColorMatchAlgorithm = rawAlgo || 'oklab';
     const preserveDetailThreshold: number = rawPDT || 0;
 
@@ -1117,13 +1117,14 @@ self.onmessage = async (e: MessageEvent) => {
         // Filter out trivial colors if enabled
         let effectivePalette = palette;
         if (filterTrivialColors && colorStats && Array.isArray(colorStats) && colorStats.length > 0) {
+            const threshold = typeof trivialThreshold === 'number' && trivialThreshold > 0 ? trivialThreshold : 0.1;
             const colorStatsMap = new Map((colorStats as Array<{ color: string; percent: number }>).map((item: { color: string; percent: number }) => [item.color, item.percent]));
             effectivePalette = palette.filter((color: string) => {
                 const percent = colorStatsMap.get(color);
                 // Keep color if it's not in stats (unused) or if it's above threshold
                 // For filtering, we want to EXCLUDE unused and below-threshold colors
                 if (!percent) return false; // Exclude unused
-                return percent >= 0.1; // Only keep above threshold (0.1%)
+                return percent >= threshold; // Only keep above dynamic threshold
             });
             // If all colors would be filtered, keep the original palette
             if (effectivePalette.length === 0) {

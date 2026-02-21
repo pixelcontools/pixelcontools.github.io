@@ -92,6 +92,11 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const [hasInitialFit, setHasInitialFit] = useState<boolean>(false);
   const [pinFitToScreen, setPinFitToScreen] = useState<boolean>(true);
   const [filterTrivialColors, setFilterTrivialColors] = useState<boolean>(false);
+  const [trivialThreshold, setTrivialThreshold] = useState<number>(0.1);
+  const [displayTrivialThreshold, setDisplayTrivialThreshold] = useState<string>('0.1');
+
+  // Before/After comparison slider (0 = all original, 100 = all pixelated)
+  const [comparePosition, setComparePosition] = useState<number>(100);
 
   // Extra Features State
   const [isExtraFeaturesOpen, setIsExtraFeaturesOpen] = useState<boolean>(false);
@@ -110,6 +115,9 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const workerRef = useRef<Worker | null>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const originalImgRef = useRef<HTMLImageElement>(null);
+  const compareContainerRef = useRef<HTMLDivElement>(null);
+  const isDraggingCompare = useRef<boolean>(false);
   const jobIdRef = useRef<number>(0);
 
   // Track previous state to restore K-Means when switching back to 'none'
@@ -354,6 +362,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           preprocessingMethod,
           preprocessingStrength,
           filterTrivialColors,
+          trivialThreshold,
           colorMatchAlgorithm,
           preserveDetailThreshold,
           colorStats: filterTrivialColors ? Array.from(colorStats.entries()).map(([c, s]) => ({ color: c, percent: s.percent })) : []
@@ -362,7 +371,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     };
     img.src = layer.imageData;
 
-  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, colorMatchAlgorithm, preserveDetailThreshold, createWorker]);
+  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, colorMatchAlgorithm, preserveDetailThreshold, createWorker]);
 
   // Debounced Effect
   useEffect(() => {
@@ -391,6 +400,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     preprocessingMethod,
     preprocessingStrength,
     filterTrivialColors,
+    trivialThreshold,
     colorMatchAlgorithm,
     preserveDetailThreshold,
     processImage
@@ -549,6 +559,36 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
       navigator.clipboard.writeText(sortedPalette.join(', '));
     }
   };
+
+  // Before/After comparison slider handlers
+  const handleCompareMouseDown = useCallback((e: React.MouseEvent) => {
+    isDraggingCompare.current = true;
+    e.preventDefault();
+  }, []);
+
+  const handleCompareMove = useCallback((clientX: number) => {
+    if (!compareContainerRef.current) return;
+    const rect = compareContainerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const percent = Math.max(0, Math.min(100, (x / rect.width) * 100));
+    setComparePosition(percent);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingCompare.current) return;
+      handleCompareMove(e.clientX);
+    };
+    const handleMouseUp = () => {
+      isDraggingCompare.current = false;
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [handleCompareMove]);
 
   // Eyedropper: add picked colors to custom palette text field
   const handleEyedropperColors = (colors: string[]) => {
@@ -889,16 +929,66 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
 
                     {(paletteMode === 'custom' || paletteMode === 'geopixels+custom') && (
                       <div className="space-y-2 border-t border-gray-700 pt-2">
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            checked={filterTrivialColors}
-                            onChange={(e) => setFilterTrivialColors(e.target.checked)}
-                            className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
-                            title="Ignore colors below 0.1% usage during processing"
-                          />
-                          <span className="text-xs text-gray-400">Filter trivial colors (&lt;0.1%)</span>
-                        </label>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center space-x-2 cursor-pointer flex-shrink-0">
+                            <input 
+                              type="checkbox" 
+                              checked={filterTrivialColors}
+                              onChange={(e) => setFilterTrivialColors(e.target.checked)}
+                              className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                              title={`Ignore colors below ${trivialThreshold}% usage during processing`}
+                            />
+                            <span className="text-xs text-gray-400">Filter trivial colors</span>
+                          </label>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <span className="text-xs text-gray-500">&lt;</span>
+                            <div className="flex items-center">
+                              <input
+                                type="text"
+                                value={displayTrivialThreshold}
+                                onChange={(e) => {
+                                  setDisplayTrivialThreshold(e.target.value);
+                                  const val = parseFloat(e.target.value);
+                                  if (!isNaN(val) && val > 0 && val <= 100) {
+                                    setTrivialThreshold(val);
+                                  }
+                                }}
+                                onBlur={() => {
+                                  const val = parseFloat(displayTrivialThreshold);
+                                  if (isNaN(val) || val <= 0) {
+                                    setTrivialThreshold(0.1);
+                                    setDisplayTrivialThreshold('0.1');
+                                  } else {
+                                    setDisplayTrivialThreshold(String(val));
+                                  }
+                                }}
+                                className="w-14 bg-gray-800 border border-gray-600 rounded-l px-1.5 py-0.5 text-xs text-center font-mono"
+                                title="Threshold percentage for trivial color filtering"
+                              />
+                              <div className="flex flex-col">
+                                <button
+                                  onClick={() => {
+                                    const next = Math.min(100, Math.round((trivialThreshold + 0.01) * 100) / 100);
+                                    setTrivialThreshold(next);
+                                    setDisplayTrivialThreshold(String(next));
+                                  }}
+                                  className="bg-gray-700 hover:bg-gray-600 border border-gray-600 border-l-0 rounded-tr px-1 leading-none text-[9px] text-gray-300 h-[11px] flex items-center"
+                                  title="Increase by 0.01%"
+                                >▲</button>
+                                <button
+                                  onClick={() => {
+                                    const next = Math.max(0.01, Math.round((trivialThreshold - 0.01) * 100) / 100);
+                                    setTrivialThreshold(next);
+                                    setDisplayTrivialThreshold(String(next));
+                                  }}
+                                  className="bg-gray-700 hover:bg-gray-600 border border-gray-600 border-l-0 border-t-0 rounded-br px-1 leading-none text-[9px] text-gray-300 h-[11px] flex items-center"
+                                  title="Decrease by 0.01%"
+                                >▼</button>
+                              </div>
+                            </div>
+                            <span className="text-xs text-gray-500">%</span>
+                          </div>
+                        </div>
                         <div className="flex items-center justify-between gap-2">
                           <label className="text-xs font-semibold text-gray-400 uppercase whitespace-nowrap">Suggest Colors</label>
                           <div className="flex items-center gap-2">
@@ -1231,6 +1321,23 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                 />
                 <span className="text-xs text-gray-400 select-none">Pin Fit</span>
               </label>
+              {/* Before/After quick buttons */}
+              <div className="flex items-center gap-1 ml-2 border-l border-gray-700 pl-2">
+                <button
+                  onClick={() => setComparePosition(0)}
+                  className="bg-gray-700 px-1.5 py-0.5 rounded hover:bg-gray-600 text-xs text-gray-300"
+                  title="Show original (before)"
+                >
+                  ◀ Before
+                </button>
+                <button
+                  onClick={() => setComparePosition(100)}
+                  className="bg-gray-700 px-1.5 py-0.5 rounded hover:bg-gray-600 text-xs text-gray-300"
+                  title="Show pixelated (after)"
+                >
+                  After ▶
+                </button>
+              </div>
             </div>
             <div className="flex space-x-2 items-center">
               <button onClick={handleZoomOut} className="bg-gray-700 p-1 rounded hover:bg-gray-600 text-sm font-bold" title="Zoom out">−</button>
@@ -1261,19 +1368,116 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                   padding: '20px',
                 }}
               >
-                <img
-                  ref={imgRef}
-                  src={previewImage}
-                  alt="Preview"
-                  draggable={false}
-                  onLoad={handleImageLoad}
+                {/* Before/After comparison container */}
+                <div
+                  ref={compareContainerRef}
+                  className="relative select-none"
                   style={{
                     width: imageDimensions ? `${imageDimensions.width * zoom}px` : 'auto',
                     height: imageDimensions ? `${imageDimensions.height * zoom}px` : 'auto',
-                    maxWidth: 'none',
-                    imageRendering: 'pixelated',
+                    cursor: isDraggingCompare.current ? 'ew-resize' : undefined,
                   }}
-                />
+                  onMouseDown={(e) => {
+                    // Allow click-to-position on the container
+                    if (e.target === compareContainerRef.current || (e.target as HTMLElement).closest('[data-compare-area]')) {
+                      isDraggingCompare.current = true;
+                      handleCompareMove(e.clientX);
+                    }
+                  }}
+                >
+                  {/* Original image (behind) */}
+                  <img
+                    ref={originalImgRef}
+                    src={layer.imageData}
+                    alt="Original"
+                    draggable={false}
+                    data-compare-area
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'fill',
+                      imageRendering: 'pixelated',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                  {/* Pixelated image (on top, clipped) */}
+                  <img
+                    ref={imgRef}
+                    src={previewImage}
+                    alt="Preview"
+                    draggable={false}
+                    onLoad={handleImageLoad}
+                    data-compare-area
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      height: '100%',
+                      maxWidth: 'none',
+                      imageRendering: 'pixelated',
+                      clipPath: `polygon(0 0, ${comparePosition}% 0, ${comparePosition}% 100%, 0 100%)`,
+                      pointerEvents: 'none',
+                    }}
+                  />
+                  {/* Slider divider line */}
+                  {comparePosition > 0 && comparePosition < 100 && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: `${comparePosition}%`,
+                        transform: 'translateX(-50%)',
+                        width: '2px',
+                        height: '100%',
+                        background: 'white',
+                        boxShadow: '0 0 4px rgba(0,0,0,0.7)',
+                        cursor: 'ew-resize',
+                        zIndex: 10,
+                      }}
+                      onMouseDown={handleCompareMouseDown}
+                    >
+                      {/* Slider handle */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '50%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          width: '24px',
+                          height: '24px',
+                          background: 'white',
+                          borderRadius: '50%',
+                          boxShadow: '0 0 6px rgba(0,0,0,0.5)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'ew-resize',
+                        }}
+                      >
+                        <span style={{ fontSize: '10px', color: '#333', fontWeight: 'bold', userSelect: 'none' }}>⟷</span>
+                      </div>
+                    </div>
+                  )}
+                  {/* Labels */}
+                  {comparePosition > 5 && comparePosition < 95 && (
+                    <>
+                      <div
+                        className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded pointer-events-none"
+                        style={{ zIndex: 11 }}
+                      >
+                        After
+                      </div>
+                      <div
+                        className="absolute top-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded pointer-events-none"
+                        style={{ zIndex: 11 }}
+                      >
+                        Before
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="absolute inset-0 flex items-center justify-center text-gray-500">
