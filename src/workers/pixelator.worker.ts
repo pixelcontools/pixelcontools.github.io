@@ -821,32 +821,37 @@ async function suggestMissingColors(
     // Greedy selection for distinct colors
     // Start with highest error, then greedily add colors that are:
     // 1. High error (good candidates)
-    // 2. Sufficiently distinct from already-selected colors (ΔE > 30)
+    // 2. Sufficiently distinct from already-selected colors
+    // Progressively relax the threshold if we can't fill the requested count
     const selected: typeof centroidErrors = [];
-    const minDistinctness = 30; // CIELAB distance threshold
-    
-    for (const candidate of centroidErrors) {
+    const thresholds = [30, 20, 12, 6, 3, 0]; // Progressively relax distinctness
+
+    for (const threshold of thresholds) {
         if (selected.length >= numToSuggest) break;
-        
-        if (selected.length === 0) {
-            // Always take the highest error color first
-            selected.push(candidate);
-        } else {
-            // Check if this color is distinct from all selected colors
-            let isDistinct = true;
-            const candidateLAB = rgbToLab(candidate.rgb);
-            
-            for (const sel of selected) {
-                const selLAB = rgbToLab(sel.rgb);
-                const deltaE = getDeltaE(candidateLAB, selLAB);
-                if (deltaE < minDistinctness) {
-                    isDistinct = false;
-                    break;
-                }
-            }
-            
-            if (isDistinct) {
+
+        for (const candidate of centroidErrors) {
+            if (selected.length >= numToSuggest) break;
+            // Skip already-selected
+            if (selected.some(s => s.hex === candidate.hex)) continue;
+
+            if (selected.length === 0) {
                 selected.push(candidate);
+            } else {
+                let isDistinct = true;
+                const candidateLAB = rgbToLab(candidate.rgb);
+
+                for (const sel of selected) {
+                    const selLAB = rgbToLab(sel.rgb);
+                    const deltaE = getDeltaE(candidateLAB, selLAB);
+                    if (deltaE < threshold) {
+                        isDistinct = false;
+                        break;
+                    }
+                }
+
+                if (isDistinct) {
+                    selected.push(candidate);
+                }
             }
         }
     }
