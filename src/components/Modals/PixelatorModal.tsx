@@ -365,7 +365,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           trivialThreshold,
           colorMatchAlgorithm,
           preserveDetailThreshold,
-          colorStats: filterTrivialColors ? Array.from(colorStats.entries()).map(([c, s]) => ({ color: c, percent: s.percent })) : []
+          colorStats: []
         }
       });
     };

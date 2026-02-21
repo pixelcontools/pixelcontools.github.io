@@ -489,7 +489,7 @@ const errorKernels: Record<string, { dx: number, dy: number, f: number }[]> = {
     ]
 };
 
-interface FindClosestResult { color: RGB; dist: number; }
+interface FindClosestResult { color: RGB; dist: number; index: number; }
 
 function findClosestColor(
   pixel: RGB,
@@ -516,6 +516,7 @@ function findClosestColor(
 
     let minDist = Infinity;
     let closest = palette[0];
+    let closestIndex = 0;
 
     // Use the integer-rounded pixel for matching (avoids sub-pixel noise)
     const matchPixel = { r: ri, g: gi, b: bi };
@@ -524,12 +525,12 @@ function findClosestColor(
       const pixelOk = rgbToOklab(matchPixel);
       for (let i = 0; i < palette.length; i++) {
         const dist = deltaE_OKLab(pixelOk, paletteOklab![i]);
-        if (dist < minDist) { minDist = dist; closest = palette[i]; }
+        if (dist < minDist) { minDist = dist; closest = palette[i]; closestIndex = i; }
       }
     } else if (algorithm === 'redmean') {
       for (let i = 0; i < palette.length; i++) {
         const dist = deltaE_Redmean(matchPixel, palette[i]);
-        if (dist < minDist) { minDist = dist; closest = palette[i]; }
+        if (dist < minDist) { minDist = dist; closest = palette[i]; closestIndex = i; }
       }
     } else {
       const pixelLab = rgbToLab(matchPixel);
@@ -538,7 +539,7 @@ function findClosestColor(
                    :                             deltaE_CIE76;
       for (let i = 0; i < palette.length; i++) {
         const dist = distFn(pixelLab, paletteLab[i]);
-        if (dist < minDist) { minDist = dist; closest = palette[i]; }
+        if (dist < minDist) { minDist = dist; closest = palette[i]; closestIndex = i; }
       }
     }
 
@@ -546,9 +547,9 @@ function findClosestColor(
 
     // Preserve detail: if the closest color is within the threshold, keep original pixel
     if (preserveDetailThreshold > 0 && minDist <= preserveDetailThreshold) {
-      result = { color: matchPixel, dist: 0 };
+      result = { color: matchPixel, dist: 0, index: closestIndex };
     } else {
-      result = { color: closest, dist: minDist };
+      result = { color: closest, dist: minDist, index: closestIndex };
     }
 
     if (cache) {
@@ -1114,28 +1115,13 @@ self.onmessage = async (e: MessageEvent) => {
         return;
     }
 
-    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, colorStats, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT } = settings;
+    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT } = settings;
     const colorMatchAlgorithm: ColorMatchAlgorithm = rawAlgo || 'oklab';
     const preserveDetailThreshold: number = rawPDT || 0;
 
     try {
-        // Filter out trivial colors if enabled
+        // Trivial color filtering is deferred until after resize (see step 1.5 below)
         let effectivePalette = palette;
-        if (filterTrivialColors && colorStats && Array.isArray(colorStats) && colorStats.length > 0) {
-            const threshold = typeof trivialThreshold === 'number' && trivialThreshold > 0 ? trivialThreshold : 0.1;
-            const colorStatsMap = new Map((colorStats as Array<{ color: string; percent: number }>).map((item: { color: string; percent: number }) => [item.color, item.percent]));
-            effectivePalette = palette.filter((color: string) => {
-                const percent = colorStatsMap.get(color);
-                // Keep color if it's not in stats (unused) or if it's above threshold
-                // For filtering, we want to EXCLUDE unused and below-threshold colors
-                if (!percent) return false; // Exclude unused
-                return percent >= threshold; // Only keep above dynamic threshold
-            });
-            // If all colors would be filtered, keep the original palette
-            if (effectivePalette.length === 0) {
-                effectivePalette = palette;
-            }
-        }
 
         // 0. Apply Color Modifiers (Global Adjustments)
         let processedImageData = imageData;
@@ -1166,6 +1152,40 @@ self.onmessage = async (e: MessageEvent) => {
             resizedImageData = resampleBilinear(processedImageData, targetWidth, targetHeight);
         } else {
             resizedImageData = resampleNearest(processedImageData, targetWidth, targetHeight);
+        }
+
+        // 1.5. Filter trivial colors based on fresh stats from the resized image
+        if (filterTrivialColors && palette && palette.length > 0) {
+            const threshold = typeof trivialThreshold === 'number' && trivialThreshold > 0 ? trivialThreshold : 0.1;
+            const paletteRGBFull = palette.map(hexToRgb);
+            const paletteLabFull = paletteRGBFull.map(rgbToLab);
+            const paletteOkFull = colorMatchAlgorithm === 'oklab' ? paletteRGBFull.map(rgbToOklab) : null;
+            const matchCache = new Map<number, FindClosestResult>();
+
+            // Count how many pixels map to each palette color
+            const hitCounts = new Array(palette.length).fill(0);
+            const resPixels = resizedImageData.data;
+            let totalOpaque = 0;
+
+            for (let i = 0; i < resPixels.length; i += 4) {
+                if (resPixels[i + 3] > 128) {
+                    totalOpaque++;
+                    const pxColor = { r: resPixels[i], g: resPixels[i + 1], b: resPixels[i + 2] };
+                    const { index } = findClosestColor(pxColor, paletteRGBFull, paletteLabFull, paletteOkFull, colorMatchAlgorithm, 0, matchCache);
+                    hitCounts[index]++;
+                }
+            }
+
+            if (totalOpaque > 0) {
+                effectivePalette = palette.filter((_: string, idx: number) => {
+                    const percent = (hitCounts[idx] / totalOpaque) * 100;
+                    return percent >= threshold;
+                });
+                // If all colors would be filtered, keep the original palette
+                if (effectivePalette.length === 0) {
+                    effectivePalette = palette;
+                }
+            }
         }
 
         // 2. K-Means
