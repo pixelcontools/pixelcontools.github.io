@@ -235,6 +235,12 @@ function resampleBilinear(srcData: ImageData, width: number, height: number): Im
   const src = srcData.data;
   const dest = new ImageData(width, height);
   const destData = dest.data;
+
+  // If dimensions match, return exact copy (no resampling needed)
+  if (width === srcData.width && height === srcData.height) {
+    destData.set(src);
+    return dest;
+  }
   
   // If downscaling significantly, use area averaging (box sampling) for smoother results
   if (width < srcData.width && height < srcData.height) {
@@ -286,8 +292,8 @@ function resampleBilinear(srcData: ImageData, width: number, height: number): Im
   }
 
   // Standard Bilinear for upscaling or mixed scaling
-  const xRatio = (srcData.width - 1) / width;
-  const yRatio = (srcData.height - 1) / height;
+  const xRatio = (srcData.width - 1) / Math.max(width - 1, 1);
+  const yRatio = (srcData.height - 1) / Math.max(height - 1, 1);
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
