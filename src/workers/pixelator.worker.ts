@@ -1121,7 +1121,7 @@ self.onmessage = async (e: MessageEvent) => {
         return;
     }
 
-    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT } = settings;
+    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT } = settings;
     const colorMatchAlgorithm: ColorMatchAlgorithm = rawAlgo || 'oklab';
     const preserveDetailThreshold: number = rawPDT || 0;
 
@@ -1163,6 +1163,7 @@ self.onmessage = async (e: MessageEvent) => {
         // 1.5. Filter trivial colors based on fresh stats from the resized image
         if (filterTrivialColors && palette && palette.length > 0) {
             const threshold = typeof trivialThreshold === 'number' && trivialThreshold > 0 ? trivialThreshold : 0.1;
+            const thresholdMode = trivialThresholdMode || 'percent';
             const paletteRGBFull = palette.map(hexToRgb);
             const paletteLabFull = paletteRGBFull.map(rgbToLab);
             const paletteOkFull = colorMatchAlgorithm === 'oklab' ? paletteRGBFull.map(rgbToOklab) : null;
@@ -1184,6 +1185,9 @@ self.onmessage = async (e: MessageEvent) => {
 
             if (totalOpaque > 0) {
                 effectivePalette = palette.filter((_: string, idx: number) => {
+                    if (thresholdMode === 'pixels') {
+                        return hitCounts[idx] >= threshold;
+                    }
                     const percent = (hitCounts[idx] / totalOpaque) * 100;
                     return percent >= threshold;
                 });

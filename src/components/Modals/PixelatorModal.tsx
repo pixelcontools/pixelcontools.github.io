@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import DraggableModal from './DraggableModal';
 import EyedropperModal from './EyedropperModal';
 import GeoPixelsPaletteModal from './GeoPixelsPaletteModal';
+import GradientPickerModal from './GradientPickerModal';
 import { usePortraitMode } from '../../hooks/usePortraitMode';
 import useCompositorStore from '../../store/compositorStore';
 import { Layer } from '../../types/compositor.types';
@@ -94,6 +95,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const [filterTrivialColors, setFilterTrivialColors] = useState<boolean>(false);
   const [trivialThreshold, setTrivialThreshold] = useState<number>(0.1);
   const [displayTrivialThreshold, setDisplayTrivialThreshold] = useState<string>('0.1');
+  const [trivialThresholdMode, setTrivialThresholdMode] = useState<'percent' | 'pixels'>('percent');
 
   // Before/After comparison slider (0 = all original, 100 = all pixelated)
   const [comparePosition, setComparePosition] = useState<number>(100);
@@ -111,6 +113,9 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
 
   // GeoPixels palette modal state
   const [isGeoPixelsPaletteOpen, setIsGeoPixelsPaletteOpen] = useState<boolean>(false);
+
+  // Gradient picker modal state
+  const [isGradientPickerOpen, setIsGradientPickerOpen] = useState<boolean>(false);
 
   const workerRef = useRef<Worker | null>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -363,6 +368,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           preprocessingStrength,
           filterTrivialColors,
           trivialThreshold,
+          trivialThresholdMode,
           colorMatchAlgorithm,
           preserveDetailThreshold,
           colorStats: []
@@ -371,7 +377,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     };
     img.src = layer.imageData;
 
-  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, colorMatchAlgorithm, preserveDetailThreshold, createWorker]);
+  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm, preserveDetailThreshold, createWorker]);
 
   // Debounced Effect
   useEffect(() => {
@@ -401,6 +407,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     preprocessingStrength,
     filterTrivialColors,
     trivialThreshold,
+    trivialThresholdMode,
     colorMatchAlgorithm,
     preserveDetailThreshold,
     processImage
@@ -840,6 +847,16 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                       </div>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsGradientPickerOpen(true)}
+                      className="flex-1 px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-medium rounded transition-colors"
+                      title="Drag across the image to capture gradient colors"
+                    >
+                      🌈 Gradients
+                    </button>
+                    <div className="flex-1" />
+                  </div>
                 </div>
               )}
 
@@ -927,8 +944,9 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                       </div>
                     )}
 
-                    {(paletteMode === 'custom' || paletteMode === 'geopixels+custom') && (
-                      <div className="space-y-2 border-t border-gray-700 pt-2">
+                    {/* Filter trivial colors — available for all palette modes except 'none' */}
+                    {paletteMode !== 'none' && (
+                      <div className="space-y-2 border-t border-gray-700 pt-2 pb-0">
                         <div className="flex items-center gap-2">
                           <label className="flex items-center space-x-2 cursor-pointer flex-shrink-0">
                             <input 
@@ -936,59 +954,112 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                               checked={filterTrivialColors}
                               onChange={(e) => setFilterTrivialColors(e.target.checked)}
                               className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
-                              title={`Ignore colors below ${trivialThreshold}% usage during processing`}
+                              title={trivialThresholdMode === 'percent'
+                                ? `Ignore colors below ${trivialThreshold}% usage during processing`
+                                : `Ignore colors with fewer than ${trivialThreshold} pixels during processing`}
                             />
                             <span className="text-xs text-gray-400">Filter trivial colors</span>
                           </label>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <span className="text-xs text-gray-500">&lt;</span>
-                            <div className="flex items-center">
-                              <input
-                                type="text"
-                                value={displayTrivialThreshold}
-                                onChange={(e) => {
-                                  setDisplayTrivialThreshold(e.target.value);
-                                  const val = parseFloat(e.target.value);
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-gray-500">&lt;</span>
+                          <div className="flex items-center">
+                            <input
+                              type="text"
+                              value={displayTrivialThreshold}
+                              onChange={(e) => {
+                                setDisplayTrivialThreshold(e.target.value);
+                                const val = parseFloat(e.target.value);
+                                if (trivialThresholdMode === 'percent') {
                                   if (!isNaN(val) && val > 0 && val <= 100) {
                                     setTrivialThreshold(val);
                                   }
-                                }}
-                                onBlur={() => {
-                                  const val = parseFloat(displayTrivialThreshold);
+                                } else {
+                                  if (!isNaN(val) && val > 0 && Number.isFinite(val)) {
+                                    setTrivialThreshold(val);
+                                  }
+                                }
+                              }}
+                              onBlur={() => {
+                                const val = parseFloat(displayTrivialThreshold);
+                                if (trivialThresholdMode === 'percent') {
                                   if (isNaN(val) || val <= 0) {
                                     setTrivialThreshold(0.1);
                                     setDisplayTrivialThreshold('0.1');
                                   } else {
                                     setDisplayTrivialThreshold(String(val));
                                   }
+                                } else {
+                                  if (isNaN(val) || val <= 0) {
+                                    setTrivialThreshold(1);
+                                    setDisplayTrivialThreshold('1');
+                                  } else {
+                                    const rounded = Math.round(val);
+                                    setTrivialThreshold(rounded);
+                                    setDisplayTrivialThreshold(String(rounded));
+                                  }
+                                }
+                              }}
+                              className="w-14 bg-gray-800 border border-gray-600 rounded-l px-1.5 py-0.5 text-xs text-center font-mono"
+                              title={trivialThresholdMode === 'percent'
+                                ? 'Threshold percentage for trivial color filtering'
+                                : 'Minimum pixel count for a color to be kept'}
+                            />
+                            <div className="flex flex-col">
+                              <button
+                                onClick={() => {
+                                  const step = trivialThresholdMode === 'percent' ? 0.01 : 1;
+                                  const max = trivialThresholdMode === 'percent' ? 100 : 999999;
+                                  const next = Math.min(max, trivialThresholdMode === 'percent'
+                                    ? Math.round((trivialThreshold + step) * 100) / 100
+                                    : trivialThreshold + step);
+                                  setTrivialThreshold(next);
+                                  setDisplayTrivialThreshold(String(next));
                                 }}
-                                className="w-14 bg-gray-800 border border-gray-600 rounded-l px-1.5 py-0.5 text-xs text-center font-mono"
-                                title="Threshold percentage for trivial color filtering"
-                              />
-                              <div className="flex flex-col">
-                                <button
-                                  onClick={() => {
-                                    const next = Math.min(100, Math.round((trivialThreshold + 0.01) * 100) / 100);
-                                    setTrivialThreshold(next);
-                                    setDisplayTrivialThreshold(String(next));
-                                  }}
-                                  className="bg-gray-700 hover:bg-gray-600 border border-gray-600 border-l-0 rounded-tr px-1 leading-none text-[9px] text-gray-300 h-[11px] flex items-center"
-                                  title="Increase by 0.01%"
-                                >▲</button>
-                                <button
-                                  onClick={() => {
-                                    const next = Math.max(0.01, Math.round((trivialThreshold - 0.01) * 100) / 100);
-                                    setTrivialThreshold(next);
-                                    setDisplayTrivialThreshold(String(next));
-                                  }}
-                                  className="bg-gray-700 hover:bg-gray-600 border border-gray-600 border-l-0 border-t-0 rounded-br px-1 leading-none text-[9px] text-gray-300 h-[11px] flex items-center"
-                                  title="Decrease by 0.01%"
-                                >▼</button>
-                              </div>
+                                className="bg-gray-700 hover:bg-gray-600 border border-gray-600 border-l-0 rounded-tr px-1 leading-none text-[9px] text-gray-300 h-[11px] flex items-center"
+                                title={trivialThresholdMode === 'percent' ? 'Increase by 0.01%' : 'Increase by 1 pixel'}
+                              >▲</button>
+                              <button
+                                onClick={() => {
+                                  const step = trivialThresholdMode === 'percent' ? 0.01 : 1;
+                                  const min = trivialThresholdMode === 'percent' ? 0.01 : 1;
+                                  const next = Math.max(min, trivialThresholdMode === 'percent'
+                                    ? Math.round((trivialThreshold - step) * 100) / 100
+                                    : trivialThreshold - step);
+                                  setTrivialThreshold(next);
+                                  setDisplayTrivialThreshold(String(next));
+                                }}
+                                className="bg-gray-700 hover:bg-gray-600 border border-gray-600 border-l-0 border-t-0 rounded-br px-1 leading-none text-[9px] text-gray-300 h-[11px] flex items-center"
+                                title={trivialThresholdMode === 'percent' ? 'Decrease by 0.01%' : 'Decrease by 1 pixel'}
+                              >▼</button>
                             </div>
-                            <span className="text-xs text-gray-500">%</span>
                           </div>
+                          <select
+                            value={trivialThresholdMode}
+                            onChange={(e) => {
+                              const newMode = e.target.value as 'percent' | 'pixels';
+                              setTrivialThresholdMode(newMode);
+                              if (newMode === 'percent') {
+                                setTrivialThreshold(0.1);
+                                setDisplayTrivialThreshold('0.1');
+                              } else {
+                                setTrivialThreshold(1);
+                                setDisplayTrivialThreshold('1');
+                              }
+                            }}
+                            className="bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-xs text-gray-400"
+                            title="Choose threshold unit"
+                          >
+                            <option value="percent">%</option>
+                            <option value="pixels">px</option>
+                          </select>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Suggest Colors — only for custom palette modes */}
+                    {(paletteMode === 'custom' || paletteMode === 'geopixels+custom') && (
+                      <div className="space-y-2 border-t border-gray-700 pt-2">
                         <div className="flex items-center justify-between gap-2">
                           <label className="text-xs font-semibold text-gray-400 uppercase whitespace-nowrap">Suggest Colors</label>
                           <div className="flex items-center gap-2">
@@ -1511,6 +1582,14 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           isOpen={isGeoPixelsPaletteOpen}
           onClose={() => setIsGeoPixelsPaletteOpen(false)}
           onAddColors={handleGeoPixelsColors}
+        />
+
+        {/* Gradient Picker Modal */}
+        <GradientPickerModal
+          isOpen={isGradientPickerOpen}
+          onClose={() => setIsGradientPickerOpen(false)}
+          imageDataUrl={layer.imageData}
+          onAddColors={handleEyedropperColors}
         />
       </div>
     )} />
