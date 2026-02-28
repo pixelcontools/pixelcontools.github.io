@@ -125,8 +125,19 @@ export async function rasterizeText(options: TextRasterizeOptions): Promise<Rast
   if (fontOption?.category === 'google' && fontOption.googleFontName) {
     try {
       await loadGoogleFont(fontOption.googleFontName);
-      // Wait a bit for font to be available
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Force-download the specific weight+size combination we need for rendering.
+      // Always load weight 400 first (universally available), then the requested weight.
+      const primaryFamily = fontFamily.split(',')[0].trim();
+      try {
+        await document.fonts.load(`400 ${fontSize}px ${primaryFamily}`);
+        if (fontWeight !== 'normal' && fontWeight !== '400') {
+          // Also try to load the requested weight; this is a no-op if unavailable
+          await document.fonts.load(`${fontWeight} ${fontSize}px ${primaryFamily}`).catch(() => {});
+        }
+      } catch {
+        // Fallback: short delay if document.fonts.load is unavailable
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
     } catch (error) {
       console.error('Failed to load Google Font, using fallback:', error);
     }

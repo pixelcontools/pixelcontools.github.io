@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import DraggableModal from './DraggableModal';
 import useCompositorStore from '../../store/compositorStore';
 import { Layer } from '../../types/compositor.types';
-import { ALL_FONTS, SYSTEM_FONTS } from '../../utils/fonts';
+import { SYSTEM_FONTS, getAllFonts, preloadAllGoogleFonts } from '../../utils/fonts';
 import { rasterizeText } from '../../utils/textRasterizer';
 
 interface TextLayerModalProps {
@@ -32,7 +32,7 @@ const TextLayerModal: React.FC<TextLayerModalProps> = ({ isOpen, onClose, existi
   const [disableTransparency, setDisableTransparency] = useState<boolean>(true);
   const [lineHeight, setLineHeight] = useState<number>(1.2);
   const [letterSpacing, setLetterSpacing] = useState<number>(0);
-  const [fontWeight, setFontWeight] = useState<'normal' | 'bold' | 'lighter'>('normal');
+  const [fontWeight, setFontWeight] = useState<'normal' | 'bold' | '300'>('normal');
   const [previewX, setPreviewX] = useState<number>(0);
   const [previewY, setPreviewY] = useState<number>(0);
   
@@ -51,13 +51,22 @@ const TextLayerModal: React.FC<TextLayerModalProps> = ({ isOpen, onClose, existi
       setDisableTransparency(existingLayer.disableTransparency || false);
       setLineHeight((existingLayer as any).lineHeight || 1.2);
       setLetterSpacing((existingLayer as any).letterSpacing || 0);
-      setFontWeight((existingLayer as any).fontWeight || 'normal');
+      // Map legacy 'lighter' value to '300' for backward compatibility
+      const fw = (existingLayer as any).fontWeight || 'normal';
+      setFontWeight(fw === 'lighter' ? '300' : fw);
       setPreviewX(existingLayer.x);
       setPreviewY(existingLayer.y);
       originalVisibilityRef.current = existingLayer.visible;
     }
   }, [existingLayer]);
   
+  // Preload all Google Fonts when modal opens so dropdown shows correct typefaces
+  useEffect(() => {
+    if (isOpen) {
+      preloadAllGoogleFonts();
+    }
+  }, [isOpen]);
+
   // Auto-generate preview when inputs change (only if modal is open)
   useEffect(() => {
     if (!isOpen || !text.trim()) {
@@ -122,6 +131,17 @@ const TextLayerModal: React.FC<TextLayerModalProps> = ({ isOpen, onClose, existi
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+  
+  // Reset fontWeight to 'normal' when switching to a font that doesn't support the current weight
+  useEffect(() => {
+    const font = getAllFonts().find(f => f.value === fontFamily);
+    const weights = font?.weights || [400, 700];
+    if (fontWeight === '300' && !weights.includes(300)) {
+      setFontWeight('normal');
+    } else if (fontWeight === 'bold' && !weights.includes(700)) {
+      setFontWeight('normal');
+    }
+  }, [fontFamily]);
   
   const generatePreview = async () => {
     if (!text.trim()) return;
@@ -242,9 +262,10 @@ const TextLayerModal: React.FC<TextLayerModalProps> = ({ isOpen, onClose, existi
         fontWeight
       } as any);
       
-      // Use preview position if canvas preview is enabled, otherwise use 0,0
-      const layerX = previewOnCanvas ? previewX : 0;
-      const layerY = previewOnCanvas ? previewY : 0;
+      // Use preview position if canvas preview is enabled or we're editing an existing layer
+      // (preserves the layer's current position when editing without "Show on Canvas" active)
+      const layerX = (previewOnCanvas || !!existingLayer) ? previewX : 0;
+      const layerY = (previewOnCanvas || !!existingLayer) ? previewY : 0;
       
       if (existingLayer) {
         // Update existing layer
@@ -305,7 +326,7 @@ const TextLayerModal: React.FC<TextLayerModalProps> = ({ isOpen, onClose, existi
   };
   
   // Filter fonts based on search
-  const filteredFonts = ALL_FONTS.filter(font =>
+  const filteredFonts = getAllFonts().filter(font =>
     font.name.toLowerCase().includes(fontSearch.toLowerCase())
   );
   
@@ -314,8 +335,14 @@ const TextLayerModal: React.FC<TextLayerModalProps> = ({ isOpen, onClose, existi
   const filteredGoogleFonts = filteredFonts.filter(f => f.category === 'google');
   
   // Get selected font name for display
-  const selectedFont = ALL_FONTS.find(f => f.value === fontFamily);
+  const selectedFont = getAllFonts().find(f => f.value === fontFamily);
   
+  // Get available weights for the selected font
+  const selectedFontWeights = selectedFont?.weights || [400, 700];
+  const hasLight = selectedFontWeights.includes(300);
+  const hasBold = selectedFontWeights.includes(700);
+  const isOnlyRegular = !hasLight && !hasBold;
+
   return (
     <DraggableModal
       isOpen={isOpen}
@@ -436,11 +463,14 @@ const TextLayerModal: React.FC<TextLayerModalProps> = ({ isOpen, onClose, existi
                     value={fontWeight}
                     onChange={(e) => setFontWeight(e.target.value as any)}
                     className="w-full px-2 py-1 bg-gray-900 border border-gray-600 rounded text-white text-sm"
+                    disabled={isOnlyRegular}
+                    title={isOnlyRegular ? 'This font only has one weight' : ''}
                   >
-                    <option value="lighter">Light</option>
+                    {hasLight && <option value="300">Light</option>}
                     <option value="normal">Normal</option>
-                    <option value="bold">Bold</option>
+                    {hasBold && <option value="bold">Bold</option>}
                   </select>
+                  {isOnlyRegular && <span className="text-[9px] text-gray-600 mt-0.5 block">Single weight font</span>}
                 </div>
               </div>
 
