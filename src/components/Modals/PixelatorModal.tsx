@@ -1456,24 +1456,27 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                     }
                   }}
                 >
-                  {/* Original image (behind) */}
-                  <img
-                    ref={originalImgRef}
-                    src={layer.imageData}
-                    alt="Original"
-                    draggable={false}
-                    data-compare-area
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'fill',
-                      imageRendering: 'pixelated',
-                      pointerEvents: 'none',
-                    }}
-                  />
+                  {/* Original image (behind, clipped to right side only) */}
+                  {comparePosition < 100 && (
+                    <img
+                      ref={originalImgRef}
+                      src={layer.imageData}
+                      alt="Original"
+                      draggable={false}
+                      data-compare-area
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'fill',
+                        imageRendering: 'pixelated',
+                        pointerEvents: 'none',
+                        clipPath: `polygon(${comparePosition}% 0, 100% 0, 100% 100%, ${comparePosition}% 100%)`,
+                      }}
+                    />
+                  )}
                   {/* Pixelated image (on top, clipped) */}
                   <img
                     ref={imgRef}
