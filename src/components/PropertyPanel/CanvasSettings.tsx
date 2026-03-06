@@ -196,19 +196,48 @@ function CanvasSettings() {
       <div className="space-y-2 pt-2 border-t border-border">
         <div className="text-xs font-semibold text-gray-300">Border</div>
         
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="input-border-enabled"
-            checked={canvas.borderEnabled ?? true}
-            onChange={(e) => setCanvasConfig({ borderEnabled: e.target.checked })}
-            className="w-4 h-4 rounded cursor-pointer"
-            title="Enable or disable canvas border"
-            aria-label="Enable or disable canvas border"
-          />
-          <label htmlFor="input-border-enabled" className="text-xs text-gray-400 cursor-pointer flex-1">
-            Show Border
-          </label>
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Viewport border (canvas outline) */}
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="input-border-enabled"
+              checked={canvas.borderEnabled ?? true}
+              onChange={(e) => setCanvasConfig({ borderEnabled: e.target.checked })}
+              className="w-4 h-4 rounded cursor-pointer"
+              title="Show/hide canvas border in viewport"
+              aria-label="Show canvas border in viewport"
+            />
+            <label htmlFor="input-border-enabled" className="text-xs text-gray-400 cursor-pointer">
+              Canvas
+            </label>
+          </div>
+
+          {/* 1px export border */}
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="input-export-border-enabled"
+              checked={canvas.exportBorderEnabled ?? false}
+              onChange={(e) => setCanvasConfig({ exportBorderEnabled: e.target.checked })}
+              className="w-4 h-4 rounded cursor-pointer"
+              title="Draw a 1px border along canvas edges on exported PNG"
+              aria-label="Draw 1px border on exported PNG"
+            />
+            <label htmlFor="input-export-border-enabled" className="text-xs text-gray-400 cursor-pointer">
+              1px
+            </label>
+            <input
+              type="color"
+              id="input-export-border-color"
+              value={canvas.exportBorderColor ?? '#FF0000'}
+              onChange={(e) => setCanvasConfig({ exportBorderColor: e.target.value })}
+              disabled={!(canvas.exportBorderEnabled ?? false)}
+              className="w-6 h-6 rounded cursor-pointer border border-border disabled:opacity-30"
+              title="1px export border color"
+              aria-label="1px export border color"
+            />
+          </div>
         </div>
       </div>
 

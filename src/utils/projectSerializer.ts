@@ -191,7 +191,8 @@ export async function exportCanvasToPNG(
   width: number,
   height: number,
   scale: number = 1,
-  backgroundColor: string | null = null
+  backgroundColor: string | null = null,
+  canvasConfig?: { exportBorderEnabled?: boolean; exportBorderColor?: string }
 ): Promise<Blob> {
   const exportCanvas = document.createElement('canvas');
   exportCanvas.width = width * scale;
@@ -224,10 +225,20 @@ export async function exportCanvasToPNG(
   for (const layer of sortedLayers) {
     try {
       const img = await loadImage(layer.imageData);
+      ctx.globalAlpha = layer.opacity ?? 1;
       ctx.drawImage(img, layer.x, layer.y);
+      ctx.globalAlpha = 1;
     } catch (error) {
       console.warn(`Failed to export layer ${layer.name}:`, error);
     }
+  }
+
+  // Draw 1px export border if enabled (drawn last, on top of all layers)
+  if (canvasConfig?.exportBorderEnabled) {
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = canvasConfig.exportBorderColor ?? '#FF0000';
+    ctx.lineWidth = 1 / scale; // 1 physical pixel regardless of scale
+    ctx.strokeRect(0.5 / scale, 0.5 / scale, width - 1 / scale, height - 1 / scale);
   }
 
   return new Promise((resolve) => {

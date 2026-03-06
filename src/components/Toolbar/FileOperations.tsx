@@ -81,7 +81,7 @@ function FileOperations() {
     try {
       const blob = await exportCanvasToPNG(
         project.layers, project.canvas.width, project.canvas.height,
-        exportScale, project.canvas.backgroundColor,
+        exportScale, project.canvas.backgroundColor, project.canvas,
       );
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

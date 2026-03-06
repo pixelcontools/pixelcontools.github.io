@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { usePortraitMode } from '../../hooks/usePortraitMode';
 
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
@@ -210,7 +211,7 @@ const MobileOrDraggable: React.FC<{
 
   if (isPortrait) {
     // Mobile: centered overlay with backdrop
-    return (
+    return createPortal(
       <div className="fixed inset-0 z-[300] flex items-center justify-center">
         {/* Backdrop */}
         <div className="absolute inset-0 bg-black/60" onClick={onClose} />
@@ -243,12 +244,14 @@ const MobileOrDraggable: React.FC<{
             {children}
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     );
   }
 
-  // Desktop: original draggable behavior
-  return (
+  // Desktop: original draggable behavior — portal to document.body so the modal
+  // escapes any overflow-hidden ancestor and can be dragged freely off-screen.
+  return createPortal((
     <div
       id={modalId}
       role="dialog"
@@ -323,7 +326,7 @@ const MobileOrDraggable: React.FC<{
         style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}
       />
     </div>
-  );
+  ), document.body);
 };
 
 export default DraggableModal;

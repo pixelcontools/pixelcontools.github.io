@@ -1,0 +1,1434 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PixelConnect — Documentation</title>
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+      background: #f5f6fa;
+      color: #1a1d2e;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    a { color: #5b6af5; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ─── CSS Variables ─────────────────────────────────────────────── */
+    :root {
+      --accent:        #5b6af5;
+      --accent-light:  #eef0ff;
+      --accent-dark:   #4048d6;
+      --sidebar-w:     280px;
+      --header-h:      56px;
+      --text:          #1a1d2e;
+      --text-muted:    #6b7280;
+      --border:        #e5e7eb;
+      --bg-page:       #f5f6fa;
+      --bg-card:       #ffffff;
+      --bg-code:       #f3f4f7;
+      --bg-aside:      #1e2235;
+      --aside-text:    #c5cae9;
+      --aside-muted:   #7882a4;
+      --aside-hover:   #282d47;
+      --aside-active:  #5b6af5;
+      --shadow-sm:     0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+      --shadow-md:     0 4px 12px rgba(0,0,0,.10);
+    }
+
+    /* ─── Top Header ────────────────────────────────────────────────── */
+    .site-header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--header-h);
+      background: #1e2235;
+      border-bottom: 1px solid #2d3358;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      z-index: 100;
+      gap: 16px;
+    }
+    .site-header .brand {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .site-header .brand span.pi { color: var(--accent); }
+    .site-header .badge {
+      background: var(--accent);
+      color: #fff;
+      font-size: .65rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .site-header .back-link {
+      margin-left: auto;
+      color: #a5b4fc;
+      font-size: .85rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border: 1px solid #3a3f5c;
+      border-radius: 6px;
+      transition: background .15s, border-color .15s;
+    }
+    .site-header .back-link:hover {
+      background: #282d47;
+      border-color: var(--accent);
+      text-decoration: none;
+    }
+    .hamburger {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #fff;
+      padding: 6px;
+      border-radius: 4px;
+    }
+    .hamburger:hover { background: rgba(255,255,255,.1); }
+    .hamburger svg { display: block; }
+
+    /* ─── Layout Shell ───────────────────────────────────────────────── */
+    .layout {
+      display: flex;
+      padding-top: var(--header-h);
+      min-height: 100vh;
+    }
+
+    /* ─── Left Sidebar ───────────────────────────────────────────────── */
+    .sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      background: var(--bg-aside);
+      position: fixed;
+      top: var(--header-h);
+      left: 0;
+      bottom: 0;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #3a3f5c transparent;
+      padding: 16px 0 40px;
+      transition: transform .25s ease;
+      z-index: 90;
+    }
+    .sidebar::-webkit-scrollbar { width: 5px; }
+    .sidebar::-webkit-scrollbar-track { background: transparent; }
+    .sidebar::-webkit-scrollbar-thumb { background: #3a3f5c; border-radius: 3px; }
+
+    .nav-section { padding: 0 0 8px; }
+    .nav-group-label {
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--aside-muted);
+      padding: 14px 20px 4px;
+    }
+
+    .nav-group summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 20px;
+      color: var(--aside-text);
+      font-size: .875rem;
+      font-weight: 600;
+      user-select: none;
+      border-left: 3px solid transparent;
+      transition: background .12s, color .12s;
+    }
+    .nav-group summary::-webkit-details-marker { display: none; }
+    .nav-group summary::after {
+      content: '▸';
+      font-size: .65rem;
+      margin-left: auto;
+      transition: transform .2s;
+      color: var(--aside-muted);
+    }
+    .nav-group details[open] > summary::after { transform: rotate(90deg); }
+    .nav-group summary:hover { background: var(--aside-hover); color: #fff; }
+    .nav-group summary .icon { width: 18px; font-size: 1rem; text-align: center; flex-shrink: 0; }
+
+    .nav-children { padding: 2px 0 6px 0; }
+    .nav-children a {
+      display: block;
+      padding: 5px 20px 5px 46px;
+      font-size: .82rem;
+      color: var(--aside-muted);
+      border-left: 3px solid transparent;
+      transition: background .12s, color .12s, border-color .12s;
+      line-height: 1.4;
+    }
+    .nav-children a:hover { background: var(--aside-hover); color: var(--aside-text); text-decoration: none; }
+    .nav-children a.active { color: #a5b4fc; border-left-color: var(--accent); background: rgba(91,106,245,.12); }
+
+    .nav-direct-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 20px;
+      color: var(--aside-text);
+      font-size: .875rem;
+      font-weight: 600;
+      border-left: 3px solid transparent;
+      transition: background .12s, color .12s, border-color .12s;
+    }
+    .nav-direct-link:hover { background: var(--aside-hover); color: #fff; text-decoration: none; }
+    .nav-direct-link.active { color: #a5b4fc; border-left-color: var(--accent); background: rgba(91,106,245,.12); }
+    .nav-direct-link .icon { width: 18px; font-size: 1rem; text-align: center; flex-shrink: 0; }
+
+    /* ─── Main Content ────────────────────────────────────────────────── */
+    .main-content {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      padding: 40px 48px 80px;
+      max-width: 900px;
+    }
+
+    .doc-section { display: none; }
+    .doc-section.active { display: block; }
+
+    /* ─── Prose ──────────────────────────────────────────────────────── */
+    .page-title { font-size: 2rem; font-weight: 800; color: var(--text); margin-bottom: 8px; line-height: 1.2; }
+    .page-subtitle { color: var(--text-muted); font-size: 1.05rem; margin-bottom: 36px; border-bottom: 1px solid var(--border); padding-bottom: 24px; }
+    h2 { font-size: 1.4rem; font-weight: 700; color: var(--text); margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--border); }
+    h3 { font-size: 1.1rem; font-weight: 700; color: var(--text); margin: 24px 0 8px; }
+    h4 { font-size: .95rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 20px 0 6px; }
+    p { line-height: 1.7; color: #374151; margin-bottom: 12px; }
+    ul, ol { padding-left: 22px; margin-bottom: 12px; }
+    li { line-height: 1.7; color: #374151; margin-bottom: 3px; }
+    li strong { color: var(--text); }
+    code {
+      font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+      font-size: .82em;
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: #5b6af5;
+    }
+    pre {
+      background: #1e2235;
+      color: #c5cae9;
+      border-radius: 8px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      margin: 16px 0;
+      font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+      font-size: .82rem;
+      line-height: 1.6;
+    }
+    pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+
+    .callout { border-left: 4px solid var(--accent); background: var(--accent-light); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: .9rem; color: #2d3570; }
+    .callout.tip  { border-color: #10b981; background: #ecfdf5; color: #065f46; }
+    .callout.warn { border-color: #f59e0b; background: #fffbeb; color: #78350f; }
+    .callout strong { display: block; margin-bottom: 3px; }
+
+    .table-wrap { overflow-x: auto; margin: 16px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+    thead tr { background: #1e2235; color: #c5cae9; }
+    thead th { padding: 10px 14px; font-weight: 600; text-align: left; }
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:hover { background: var(--accent-light); }
+    tbody td { padding: 9px 14px; vertical-align: top; }
+    kbd {
+      display: inline-block;
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: .78rem;
+      background: #f9fafb;
+      border: 1px solid #d1d5db;
+      border-bottom: 3px solid #d1d5db;
+      border-radius: 5px;
+      padding: 1px 7px;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .pill { display: inline-block; font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .05em; }
+    .pill.blue   { background: #dbeafe; color: #1e40af; }
+    .pill.green  { background: #d1fae5; color: #065f46; }
+    .pill.purple { background: #ede9fe; color: #5b21b6; }
+    .pill.yellow { background: #fef3c7; color: #92400e; }
+    .pill.red    { background: #fee2e2; color: #991b1b; }
+
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin: 16px 0; }
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; box-shadow: var(--shadow-sm); }
+    .card h4 { margin: 0 0 6px; font-size: .85rem; font-weight: 700; color: var(--text); text-transform: none; letter-spacing: 0; }
+    .card p  { font-size: .82rem; color: var(--text-muted); margin: 0; }
+    .card .card-icon { font-size: 1.5rem; margin-bottom: 8px; }
+
+    .steps { counter-reset: step; margin: 16px 0; }
+    .step { display: flex; gap: 14px; margin-bottom: 14px; }
+    .step::before {
+      counter-increment: step; content: counter(step);
+      flex-shrink: 0; width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--accent); color: #fff; border-radius: 50%;
+      font-size: .8rem; font-weight: 700; margin-top: 2px;
+    }
+    .step p { margin: 0; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 16px 0; }
+    @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+
+    .prop-list { margin: 12px 0; }
+    .prop-item { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: .875rem; }
+    .prop-item:last-child { border-bottom: none; }
+    .prop-name { flex-shrink: 0; width: 160px; font-family: 'SF Mono', Consolas, monospace; font-size: .8rem; color: #5b6af5; font-weight: 600; padding-top: 1px; }
+    .prop-desc { color: #374151; line-height: 1.5; }
+    .prop-type { flex-shrink: 0; color: var(--text-muted); font-size: .78rem; font-family: monospace; padding-top: 2px; }
+
+    /* ─── Responsive ─────────────────────────────────────────────────── */
+    @media (max-width: 900px) { .main-content { padding: 28px 24px 60px; } }
+    @media (max-width: 700px) {
+      .sidebar { transform: translateX(-100%); box-shadow: none; }
+      .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-md); }
+      .main-content { margin-left: 0; padding: 24px 18px 60px; }
+      .hamburger { display: block; }
+      .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 89; }
+      .sidebar-overlay.open { display: block; }
+    }
+
+    #back-to-top {
+      position: fixed; bottom: 28px; right: 28px; width: 40px; height: 40px;
+      background: var(--accent); color: #fff; border: none; border-radius: 50%;
+      cursor: pointer; font-size: 1.1rem; box-shadow: var(--shadow-md);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 80;
+    }
+    #back-to-top.visible { opacity: 1; pointer-events: auto; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<header class="site-header">
+  <button class="hamburger" id="hamburger-btn" aria-label="Toggle sidebar">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="3" y1="5" x2="17" y2="5"/><line x1="3" y1="10" x2="17" y2="10"/><line x1="3" y1="15" x2="17" y2="15"/>
+    </svg>
+  </button>
+  <div class="brand">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+      <rect x="2" y="2" width="8" height="8" rx="1" fill="#5b6af5"/>
+      <rect x="12" y="2" width="8" height="8" rx="1" fill="#a5b4fc"/>
+      <rect x="2" y="12" width="8" height="8" rx="1" fill="#a5b4fc"/>
+      <rect x="12" y="12" width="8" height="8" rx="1" fill="#5b6af5"/>
+    </svg>
+    <span><span class="pi">Pi</span>xelConnect</span>
+    <span class="badge">Docs</span>
+  </div>
+  <a class="back-link" href="../">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 11L5 7l4-4"/>
+    </svg>
+    Back to App
+  </a>
+</header>
+
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<div class="layout">
+
+  <!-- ── Sidebar ───────────────────────────────────────────────────────── -->
+  <nav class="sidebar" id="sidebar" aria-label="Documentation navigation">
+
+    <div class="nav-section">
+      <a class="nav-direct-link active" href="#" data-section="getting-started">
+        <span class="icon">🚀</span> Getting Started
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-group">
+        <details open>
+          <summary><span class="icon">🖼️</span> Canvas</summary>
+          <div class="nav-children">
+            <a href="#" data-section="canvas-size">Canvas Size &amp; Presets</a>
+            <a href="#" data-section="canvas-background">Background &amp; Transparency</a>
+            <a href="#" data-section="canvas-border">Border</a>
+            <a href="#" data-section="canvas-shadow">Shadow</a>
+            <a href="#" data-section="canvas-grid">Grid</a>
+            <a href="#" data-section="canvas-rulers">Rulers &amp; Guides</a>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-group">
+        <details open>
+          <summary><span class="icon">📚</span> Layers</summary>
+          <div class="nav-children">
+            <a href="#" data-section="layers-panel">Layer Panel</a>
+            <a href="#" data-section="layers-adding">Adding Layers</a>
+            <a href="#" data-section="layers-controls">Layer Controls</a>
+            <a href="#" data-section="layers-selection">Multi-Selection</a>
+            <a href="#" data-section="layers-text">Text Layers</a>
+            <a href="#" data-section="layers-shapes">Shape Layers</a>
+            <a href="#" data-section="layers-reorder">Reordering Layers</a>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-group">
+        <details open>
+          <summary><span class="icon">🔍</span> Viewport &amp; Navigation</summary>
+          <div class="nav-children">
+            <a href="#" data-section="viewport-zoom">Zoom</a>
+            <a href="#" data-section="viewport-pan">Panning</a>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-group">
+        <details open>
+          <summary><span class="icon">⚙️</span> Property Panel</summary>
+          <div class="nav-children">
+            <a href="#" data-section="props-position">Position &amp; Size</a>
+            <a href="#" data-section="props-opacity">Opacity</a>
+            <a href="#" data-section="props-color-analysis">Color Analysis</a>
+            <a href="#" data-section="props-shape-props">Shape Properties</a>
+            <a href="#" data-section="props-bulk">Bulk Controls</a>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-group">
+        <details open>
+          <summary><span class="icon">🛠️</span> Editing Tools</summary>
+          <div class="nav-children">
+            <a href="#" data-section="tools-pixelator">Pixelator / Resize</a>
+            <a href="#" data-section="tools-crop">Crop</a>
+            <a href="#" data-section="tools-bg-removal">Background Removal</a>
+            <a href="#" data-section="tools-transparency">Transparency Mask</a>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-group">
+        <details open>
+          <summary><span class="icon">💾</span> File Operations</summary>
+          <div class="nav-children">
+            <a href="#" data-section="file-export">Exporting</a>
+            <a href="#" data-section="file-import">Importing</a>
+            <a href="#" data-section="file-browser-storage">Browser Storage</a>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <a class="nav-direct-link" href="#" data-section="keyboard-shortcuts">
+        <span class="icon">⌨️</span> Keyboard Shortcuts
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-group">
+        <details>
+          <summary><span class="icon">🔄</span> History &amp; Auto-Save</summary>
+          <div class="nav-children">
+            <a href="#" data-section="history-undo">Undo &amp; Redo</a>
+            <a href="#" data-section="history-autosave">Auto-Save</a>
+            <a href="#" data-section="history-debug">Debug Menu</a>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-group">
+        <details>
+          <summary><span class="icon">📄</span> Data Format</summary>
+          <div class="nav-children">
+            <a href="#" data-section="data-pixcomp">Project File (.pixcomp)</a>
+            <a href="#" data-section="data-layer-schema">Layer Schema</a>
+          </div>
+        </details>
+      </div>
+    </div>
+
+  </nav>
+
+  <!-- ── Main Content ───────────────────────────────────────────────────── -->
+  <main class="main-content" id="main-content">
+
+    <!-- GETTING STARTED -->
+    <section class="doc-section active" id="s-getting-started">
+      <h1 class="page-title">Getting Started</h1>
+      <p class="page-subtitle">An introduction to PixelConnect — a pixel-perfect, browser-based image compositor and pixel art editor.</p>
+
+      <h2>What is PixelConnect?</h2>
+      <p>PixelConnect is a fully client-side image compositor and pixel art tool. Every operation — compositing, editing, exporting — runs entirely in your browser. No account, no server, no install required.</p>
+      <p>It is designed around a layer-based workflow similar to Photoshop or Aseprite, but optimized for pixel art and geo-based image work.</p>
+
+      <div class="card-grid">
+        <div class="card"><div class="card-icon">🧱</div><h4>Layer-based composition</h4><p>Stack images, text, and shapes with full control over position, opacity, and z-order.</p></div>
+        <div class="card"><div class="card-icon">🎨</div><h4>Pixel art tools</h4><p>Pixelator converts any image into pixel art using palette matching and dithering algorithms.</p></div>
+        <div class="card"><div class="card-icon">✍️</div><h4>Text &amp; shapes</h4><p>Add rasterized text with Google Fonts and geometric shapes directly to your canvas.</p></div>
+        <div class="card"><div class="card-icon">💾</div><h4>Offline-capable</h4><p>Projects auto-save to IndexedDB. Export to PNG or the native .pixcomp format.</p></div>
+      </div>
+
+      <h2>Interface Overview</h2>
+      <p>The interface has four main regions on desktop:</p>
+      <ul>
+        <li><strong>Left — Layer Panel:</strong> Lists all layers, controls visibility/lock/order, and exposes Canvas Settings at the bottom.</li>
+        <li><strong>Center — Canvas:</strong> The interactive viewport where you position and preview layers.</li>
+        <li><strong>Right — Property Panel:</strong> Shows position, opacity, color analysis, and editing tools for the selected layer.</li>
+        <li><strong>Top — Toolbar:</strong> Project name, file operations, history, zoom, and grid controls.</li>
+      </ul>
+      <div class="callout">
+        <strong>Portrait / Mobile layout</strong>
+        On narrow screens the side panels collapse. Two floating buttons (☰ bottom-left, ⚙ bottom-right) open the layers and properties drawers respectively.
+      </div>
+
+      <h2>First Visit</h2>
+      <p>On the very first visit a demo image is loaded and an <strong>interactive guided tour</strong> starts automatically, stepping through each major area. The tour can be re-opened at any time via the <strong>?</strong> button in the toolbar.</p>
+
+      <h2>Quick Start</h2>
+      <div class="steps">
+        <div class="step"><p>Drag one or more image files onto the canvas, or click <strong>Add</strong> in the Layer Panel to browse for files.</p></div>
+        <div class="step"><p>Click a layer in the panel or on the canvas to select it. Drag it to reposition.</p></div>
+        <div class="step"><p>Adjust position, opacity, and apply editing tools from the <strong>Property Panel</strong> on the right.</p></div>
+        <div class="step"><p>Click <strong>Save → Export PNG</strong> in the toolbar to download your composition.</p></div>
+      </div>
+    </section>
+
+    <!-- CANVAS SIZE -->
+    <section class="doc-section" id="s-canvas-size">
+      <h1 class="page-title">Canvas Size &amp; Presets</h1>
+      <p class="page-subtitle">Configure the working canvas dimensions. Found in the <strong>Canvas Settings</strong> section at the bottom of the Layer Panel.</p>
+
+      <h2>Preset Sizes</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Label</th><th>Dimensions</th></tr></thead>
+          <tbody>
+            <tr><td>1024 × 1024</td><td>1024 × 1024 px</td></tr>
+            <tr><td>2048 × 2048</td><td>2048 × 2048 px</td></tr>
+            <tr><td>1080p</td><td>1920 × 1080 px</td></tr>
+            <tr><td>4K</td><td>3840 × 2160 px</td></tr>
+            <tr><td>Horizontal (GeoPixels)</td><td>4632 × 2316 px</td></tr>
+            <tr><td>Vertical (GeoPixels)</td><td>2316 × 4632 px</td></tr>
+            <tr><td>Square (default)</td><td>3276 × 3276 px</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Custom Size</h2>
+      <p>Enter any width/height in the <strong>Width</strong> and <strong>Height</strong> inputs. Values are accepted in whole pixels.</p>
+
+      <h2>Crop Canvas to Layers</h2>
+      <p>The <strong>Crop to Layers</strong> button resizes the canvas to the exact bounding box of all layers. Layer positions are recalculated to remain visually identical. The viewport then auto-fits to the new canvas size.</p>
+      <div class="callout tip"><strong>Tip</strong> Use Crop to Layers before exporting to eliminate empty canvas space and reduce file size.</div>
+    </section>
+
+    <!-- CANVAS BACKGROUND -->
+    <section class="doc-section" id="s-canvas-background">
+      <h1 class="page-title">Background &amp; Transparency</h1>
+      <p class="page-subtitle">Control what appears behind all layers on the canvas.</p>
+
+      <h2>Background Color</h2>
+      <p>Click the color swatch in Canvas Settings to open the native color picker. The color fills the entire canvas and <strong>is</strong> included in PNG exports.</p>
+
+      <h2>Transparent Background</h2>
+      <p>Click the <strong>Clear</strong> button to set the background to <code>null</code> (transparent). Transparent pixels are preserved in PNG exports.</p>
+
+      <h2>Checkered Background</h2>
+      <p>The <strong>checkered toggle</strong> overlays an 8×8 px white/gray checkerboard to visualize transparent areas. This pattern is cosmetic only — never included in exports.</p>
+    </section>
+
+    <!-- CANVAS BORDER -->
+    <section class="doc-section" id="s-canvas-border">
+      <h1 class="page-title">Canvas Border</h1>
+      <p class="page-subtitle">Add a decorative border around the canvas area.</p>
+
+      <div class="prop-list">
+        <div class="prop-item"><div class="prop-name">Enabled</div><div class="prop-desc">Checkbox to show or hide the border. Off by default.</div></div>
+        <div class="prop-item"><div class="prop-name">Color</div><div class="prop-desc">Hex color for the border stroke. Default <code>#000000</code>.</div></div>
+        <div class="prop-item"><div class="prop-name">Width</div><div class="prop-desc">Thickness in pixels. The border expands <em>outward</em> — it does not overlap canvas content.</div></div>
+        <div class="prop-item"><div class="prop-name">Opacity</div><div class="prop-desc">0–100%. Affects only the border stroke.</div></div>
+      </div>
+      <div class="callout tip"><strong>Tip</strong> The border is viewport-only. It is <strong>not</strong> rendered in PNG exports.</div>
+    </section>
+
+    <!-- CANVAS SHADOW -->
+    <section class="doc-section" id="s-canvas-shadow">
+      <h1 class="page-title">Canvas Shadow</h1>
+      <p class="page-subtitle">A soft drop shadow beneath the canvas area in the viewport.</p>
+      <h2>Shadow Intensity</h2>
+      <p>The slider (0–100%) controls the strength of the drop shadow. Default is <strong>50%</strong>. Like the border, the shadow is viewport-only and does not appear in PNG exports.</p>
+    </section>
+
+    <!-- CANVAS GRID -->
+    <section class="doc-section" id="s-canvas-grid">
+      <h1 class="page-title">Grid</h1>
+      <p class="page-subtitle">A pixel-aligned grid overlay for precise placement.</p>
+
+      <h2>Enabling the Grid</h2>
+      <p>Toggle the grid with the <strong>grid icon button</strong> in the toolbar. When enabled, the grid is drawn as a canvas overlay on top of all layers.</p>
+
+      <h2>Grid Density</h2>
+      <p>The <strong>Density</strong> slider (1–8) controls how many canvas pixels fall between each grid line. A density of 1 draws a line every pixel; 4 (default) draws a line every 4 pixels.</p>
+
+      <h2>Visibility Behavior</h2>
+      <ul>
+        <li>Hidden at zoom levels <strong>below 50%</strong>.</li>
+        <li>Between 50%–150% zoom: fades in from 0% to 30% opacity.</li>
+        <li>Above 150% zoom: steady 40% opacity.</li>
+        <li>At very low zoom, effective density is auto-multiplied to prevent overcrowding.</li>
+      </ul>
+      <h2>Persistence</h2>
+      <p>Grid state and density are saved to <code>localStorage</code> and restored on the next visit.</p>
+    </section>
+
+    <!-- CANVAS RULERS -->
+    <section class="doc-section" id="s-canvas-rulers">
+      <h1 class="page-title">Rulers &amp; Guides</h1>
+      <p class="page-subtitle">Pixel rulers and guide lines for precise layout.</p>
+
+      <h2>Rulers</h2>
+      <p>Toggle rulers from the toolbar. When enabled, horizontal and vertical pixel rulers appear along the canvas edges and track your current zoom and pan position.</p>
+
+      <h2>Guides</h2>
+      <p>Guides are stored as part of the project file. Each guide has:</p>
+      <div class="prop-list">
+        <div class="prop-item"><div class="prop-name">axis</div><div class="prop-desc"><code>'x'</code> (vertical-line guide) or <code>'y'</code> (horizontal-line guide).</div></div>
+        <div class="prop-item"><div class="prop-name">position</div><div class="prop-desc">Canvas pixel position of the guide line.</div></div>
+        <div class="prop-item"><div class="prop-name">id</div><div class="prop-desc">Unique string identifier.</div></div>
+      </div>
+    </section>
+
+    <!-- LAYER PANEL -->
+    <section class="doc-section" id="s-layers-panel">
+      <h1 class="page-title">Layer Panel</h1>
+      <p class="page-subtitle">The left panel lists and manages all layers in the project.</p>
+
+      <h2>Header Controls</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Button</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td><strong>All</strong></td><td>Select all layers</td></tr>
+            <tr><td><strong>None</strong></td><td>Deselect all layers</td></tr>
+            <tr><td><strong>Delete</strong> (red)</td><td>Delete all selected layers (confirmation required)</td></tr>
+            <tr><td><strong>T</strong> (blue)</td><td>Open the Text Layer creator</td></tr>
+            <tr><td><strong>◆</strong> (purple)</td><td>Open the Shape Layer creator</td></tr>
+            <tr><td><strong>Add</strong> (green)</td><td>Open a file picker to import images</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Layer List Order</h2>
+      <p>Layers are sorted <strong>by z-index descending</strong> — the top of the list is the frontmost layer visually.</p>
+
+      <h2>Footer</h2>
+      <p>Shows total layer count and selected layer count.</p>
+
+      <h2>Canvas Settings</h2>
+      <p>Below the layer list is the collapsible <strong>Canvas Settings</strong> section for canvas size, background, border, shadow, and grid.</p>
+    </section>
+
+    <!-- ADDING LAYERS -->
+    <section class="doc-section" id="s-layers-adding">
+      <h1 class="page-title">Adding Layers</h1>
+      <p class="page-subtitle">Multiple ways to add content to your composition.</p>
+
+      <h2>Drag &amp; Drop</h2>
+      <p>Drag image files directly onto the canvas area. Supported formats: PNG, JPG, GIF, WebP, SVG, BMP. A <strong>"Drop image(s) here"</strong> overlay appears on hover.</p>
+
+      <h2>File Picker</h2>
+      <p>Click <strong>Add</strong> in the Layer Panel header. Multiple files can be selected at once — each becomes a separate layer.</p>
+
+      <h2>Paste from Clipboard</h2>
+      <p>Press <kbd>Ctrl</kbd><kbd>V</kbd> while the canvas is focused. An image paste becomes a new layer; plain text paste is rasterized into a text layer.</p>
+
+      <h2>Text Layer</h2>
+      <p>Click the <strong>T</strong> button in the Layer Panel. See <a href="#" data-section="layers-text">Text Layers</a> for details.</p>
+
+      <h2>Shape Layer</h2>
+      <p>Click the <strong>◆</strong> button. See <a href="#" data-section="layers-shapes">Shape Layers</a> for details.</p>
+
+      <h2>Upload Zone</h2>
+      <p>When no layers exist, a large centered upload zone is shown with file upload prompts.</p>
+    </section>
+
+    <!-- LAYER CONTROLS -->
+    <section class="doc-section" id="s-layers-controls">
+      <h1 class="page-title">Layer Controls</h1>
+      <p class="page-subtitle">Controls available on each layer row in the panel.</p>
+
+      <h2>Always-Visible Controls</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Control</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Thumbnail</strong></td><td>8×8 pixel-art preview. Text layers show a blue "T" badge.</td></tr>
+            <tr><td><strong>Layer Name</strong></td><td>Click the pencil icon to rename inline. Enter to confirm, Escape to cancel.</td></tr>
+            <tr><td><strong>👁 Visibility</strong></td><td>Toggle layer visibility. Hidden layers are excluded from exports.</td></tr>
+            <tr><td><strong>🔒 Lock</strong></td><td>Prevents mouse-drag repositioning. Position inputs still work.</td></tr>
+            <tr><td><strong>Dimensions</strong></td><td>Read-only: <code>{width}×{height} • z:{zIndex}</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Hover-Only Controls</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Control</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><strong>T</strong> (text layers)</td><td>Re-open the Text Layer editor.</td></tr>
+            <tr><td><strong>◆</strong> (shape layers)</td><td>Re-open the Shape Layer editor.</td></tr>
+            <tr><td><strong>↑ Bring to Front</strong></td><td>Moves layer above all others (max z-index).</td></tr>
+            <tr><td><strong>↓ Send to Back</strong></td><td>Moves layer below all others (min z-index).</td></tr>
+            <tr><td><strong>Duplicate</strong></td><td>Creates a copy appended with " (copy)".</td></tr>
+            <tr><td><strong>Delete</strong></td><td>Removes the layer. Undoable via Ctrl+Z.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- MULTI-SELECTION -->
+    <section class="doc-section" id="s-layers-selection">
+      <h1 class="page-title">Multi-Selection</h1>
+      <p class="page-subtitle">Select and operate on multiple layers simultaneously.</p>
+
+      <h2>Selection Methods</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Action</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td>Click a layer</td><td>Select that layer, deselect all others</td></tr>
+            <tr><td><kbd>Ctrl</kbd> + Click</td><td>Toggle that layer in/out of the selection</td></tr>
+            <tr><td><kbd>Shift</kbd> + Click</td><td>Range-select from last selected to clicked layer</td></tr>
+            <tr><td><kbd>Ctrl</kbd><kbd>A</kbd></td><td>Select all layers</td></tr>
+            <tr><td><kbd>Ctrl</kbd><kbd>D</kbd></td><td>Deselect all layers</td></tr>
+            <tr><td>Click empty canvas</td><td>Deselect all layers</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Operations on Multiple Layers</h2>
+      <ul>
+        <li><strong>Delete:</strong> <kbd>Delete</kbd> removes all selected layers (with confirmation).</li>
+        <li><strong>Move:</strong> Drag any selected layer to move all together.</li>
+        <li><strong>Nudge:</strong> Arrow keys move all selected layers 1 pixel.</li>
+        <li><strong>Reorder:</strong> <kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> reorders all selected layers.</li>
+        <li><strong>Copy:</strong> <kbd>Ctrl</kbd><kbd>C</kbd> copies all selected to the internal clipboard.</li>
+        <li><strong>Offset:</strong> The Bulk Controls section lets you enter an X/Y offset for all selected layers.</li>
+      </ul>
+    </section>
+
+    <!-- TEXT LAYERS -->
+    <section class="doc-section" id="s-layers-text">
+      <h1 class="page-title">Text Layers</h1>
+      <p class="page-subtitle">Create rasterized text layers with full font and style control.</p>
+
+      <h2>Opening the Text Editor</h2>
+      <p>Click the <strong>T</strong> button in the Layer Panel header to create a new text layer. To edit an existing one, click the blue T icon on hover in the layer row.</p>
+
+      <h2>Text Settings</h2>
+      <div class="prop-list">
+        <div class="prop-item"><div class="prop-name">Text Content</div><div class="prop-desc">Multiline text. Newlines create line breaks.</div></div>
+        <div class="prop-item"><div class="prop-name">Font Family</div><div class="prop-desc">Searchable dropdown. Selecting a Google Font loads it automatically via the Google Fonts API.</div></div>
+        <div class="prop-item"><div class="prop-name">Font Size</div><div class="prop-desc">Size in pixels. Default <strong>48px</strong>. Internally rendered at 4× resolution for sharpness.</div></div>
+        <div class="prop-item"><div class="prop-name">Font Weight</div><div class="prop-desc"><code>normal</code>, <code>bold</code>, or <code>300</code> (light). Filtered to weights supported by the selected font.</div></div>
+        <div class="prop-item"><div class="prop-name">Font Color</div><div class="prop-desc">Hex color. Default <code>#FFCDD2</code>.</div></div>
+        <div class="prop-item"><div class="prop-name">Text Alignment</div><div class="prop-desc"><code>left</code>, <code>center</code>, or <code>right</code>.</div></div>
+        <div class="prop-item"><div class="prop-name">Line Height</div><div class="prop-desc">Multiplier applied to font size. Default <strong>1.2</strong>.</div></div>
+        <div class="prop-item"><div class="prop-name">Letter Spacing</div><div class="prop-desc">Extra spacing between characters in pixels. Default <strong>0</strong>.</div></div>
+        <div class="prop-item"><div class="prop-name">Disable Transparency</div><div class="prop-desc">When enabled (default), text is rendered without anti-aliasing — each pixel is fully opaque or fully transparent for a crisp pixel-art look.</div></div>
+      </div>
+
+      <h2>Available Fonts</h2>
+      <p><strong>System (9):</strong> Arial, Times New Roman, Courier New, Georgia, Verdana, Comic Sans MS, Impact, Trebuchet MS, Jokerman</p>
+      <p><strong>Google Fonts (50+):</strong> Sans-serif (Roboto, Open Sans, Montserrat, Poppins), Serif (Merriweather, Playfair Display), Display (Bebas Neue, Pacifico, Bangers, Press Start 2P), Handwriting (Dancing Script, Caveat), Monospace (Fira Code, JetBrains Mono), Fun (Creepster, Chewy, Ranchers), and more.</p>
+
+      <h2>Canvas Preview</h2>
+      <p>While the editor is open, a live preview layer appears on the canvas at 70% opacity. Drag it to choose placement. Position is committed when you click <strong>Add</strong> or <strong>Update</strong>.</p>
+    </section>
+
+    <!-- SHAPE LAYERS -->
+    <section class="doc-section" id="s-layers-shapes">
+      <h1 class="page-title">Shape Layers</h1>
+      <p class="page-subtitle">Create pixel-perfect geometric shapes as layers.</p>
+
+      <h2>Opening the Shape Editor</h2>
+      <p>Click the <strong>◆</strong> button in the Layer Panel header. To edit an existing shape, click the purple ◆ icon on hover in the layer row.</p>
+
+      <h2>Shape Types</h2>
+      <div class="card-grid">
+        <div class="card"><h4>Rectangle</h4><p>Axis-aligned rectangle. Use stretch for wide/tall variants.</p></div>
+        <div class="card"><h4>Circle</h4><p>Ellipse. Stretch X/Y independently for ovals.</p></div>
+        <div class="card"><h4>Triangle</h4><p>Equilateral triangle, pointing upward.</p></div>
+        <div class="card"><h4>Hexagon</h4><p>Regular 6-sided polygon, flat-top.</p></div>
+        <div class="card"><h4>Octagon</h4><p>Regular 8-sided polygon.</p></div>
+        <div class="card"><h4>Star</h4><p>5-pointed star.</p></div>
+      </div>
+
+      <h2>Shape Settings</h2>
+      <div class="prop-list">
+        <div class="prop-item"><div class="prop-name">Size</div><div class="prop-desc">Base size in pixels. Default <strong>200px</strong>.</div></div>
+        <div class="prop-item"><div class="prop-name">Stretch X</div><div class="prop-desc">Horizontal scale multiplier. Range 0.1–20.0.</div></div>
+        <div class="prop-item"><div class="prop-name">Stretch Y</div><div class="prop-desc">Vertical scale multiplier. Range 0.1–20.0.</div></div>
+        <div class="prop-item"><div class="prop-name">Color</div><div class="prop-desc">Hex fill color. Default <code>#FFFFFF</code>.</div></div>
+      </div>
+
+      <h2>Rendering</h2>
+      <p>Shapes are rendered at 1× scale. Anti-aliased pixels are thresholded: alpha ≥ 128 → fully opaque; alpha &lt; 128 → fully transparent. Shape metadata is stored so shapes can be re-edited at any time.</p>
+    </section>
+
+    <!-- REORDERING -->
+    <section class="doc-section" id="s-layers-reorder">
+      <h1 class="page-title">Reordering Layers</h1>
+      <p class="page-subtitle">Control the stacking (z-order) of layers.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Method</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>Drag in panel</td><td>Drag a layer row up or down; updates live as you cross other rows.</td></tr>
+            <tr><td>↑ Bring to Front</td><td>Hover → click up arrow. Sets to max z-index.</td></tr>
+            <tr><td>↓ Send to Back</td><td>Hover → click down arrow. Sets to min z-index.</td></tr>
+            <tr><td><kbd>Shift</kbd>+<kbd>↑</kbd></td><td>Move selected layer(s) one position up.</td></tr>
+            <tr><td><kbd>Shift</kbd>+<kbd>↓</kbd></td><td>Move selected layer(s) one position down.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout"><strong>Note</strong> Bringing to front assigns <code>max(z-index) + 1</code>; sending to back assigns <code>min(z-index) − 1</code>.</div>
+    </section>
+
+    <!-- ZOOM -->
+    <section class="doc-section" id="s-viewport-zoom">
+      <h1 class="page-title">Zoom</h1>
+      <p class="page-subtitle">Zoom in and out of the canvas for precise editing.</p>
+
+      <h2>Zoom Preset Levels</h2>
+      <p>PixelConnect snaps to fixed zoom levels: <strong>25, 33, 50, 66, 75, 100, 125, 150, 200, 400, 800, 1600, 3200%</strong></p>
+
+      <h2>Zoom Controls</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Control</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td><strong>− button</strong></td><td>Step to next lower preset</td></tr>
+            <tr><td><strong>% button</strong></td><td>Current zoom. Hover to open all-presets dropdown.</td></tr>
+            <tr><td><strong>+ button</strong></td><td>Step to next higher preset</td></tr>
+            <tr><td><strong>Reset/Fit</strong></td><td>Fits canvas to viewport, resets pan to 0,0</td></tr>
+            <tr><td>Scroll wheel</td><td>Steps through zoom presets</td></tr>
+            <tr><td><kbd>+</kbd> / <kbd>=</kbd></td><td>Zoom in one level</td></tr>
+            <tr><td><kbd>-</kbd></td><td>Zoom out one level</td></tr>
+            <tr><td><kbd>0</kbd></td><td>Reset to 100% zoom</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Pixel-Perfect Rendering</h2>
+      <p>All rendering uses <code>imageSmoothingEnabled = false</code>. Pixels are never interpolated — every canvas pixel maps to one or more screen pixels producing sharp pixel-art display at all zoom levels.</p>
+    </section>
+
+    <!-- PANNING -->
+    <section class="doc-section" id="s-viewport-pan">
+      <h1 class="page-title">Panning</h1>
+      <p class="page-subtitle">Navigate around large canvases.</p>
+
+      <h2>Default Mode (Select Tool Active)</h2>
+      <ul>
+        <li><strong>Left-click on a layer</strong> → selects and drags the layer.</li>
+        <li><strong>Left-click on empty canvas</strong> → deselects all and pans.</li>
+        <li><strong>Middle-click drag</strong> → pans the canvas.</li>
+        <li><strong>Space + left-click drag</strong> → temporarily pans regardless of cursor target.</li>
+      </ul>
+
+      <h2>Left-Click Pan Mode</h2>
+      <p>Toggle <strong>Left-Click Pan</strong> from the toolbar (hand icon button). Behavior is inverted:</p>
+      <ul>
+        <li><strong>Left-click drag</strong> → always pans.</li>
+        <li><strong>Middle-click drag</strong> → drags layers.</li>
+        <li><strong>Space + left-click drag</strong> → temporarily reverts to select/drag.</li>
+      </ul>
+      <div class="callout tip"><strong>Tip</strong> Space temporarily toggles pan mode while held, no matter which mode is active.</div>
+
+      <h2>Drag Info Tooltip</h2>
+      <p>When dragging a layer, a tooltip near the cursor shows the live <strong>X and Y offset</strong> from the layer's original position. Toggle this in Canvas Settings via the <strong>Drag Info</strong> option.</p>
+    </section>
+
+    <!-- POSITION -->
+    <section class="doc-section" id="s-props-position">
+      <h1 class="page-title">Position &amp; Size</h1>
+      <p class="page-subtitle">Precise numerical control over a layer's position and dimensions.</p>
+
+      <h2>Position Inputs</h2>
+      <p>The <strong>X</strong> and <strong>Y</strong> inputs in the Property Panel show the top-left corner of the selected layer in canvas pixels. Values may be negative. Type a new value and press Enter or click away to apply.</p>
+      <p>While dragging, the inputs show the real-time position live.</p>
+
+      <h2>Read-only Fields</h2>
+      <div class="prop-list">
+        <div class="prop-item"><div class="prop-name">Width</div><div class="prop-desc">Layer image width in pixels. Use Pixelator/Resize to change.</div></div>
+        <div class="prop-item"><div class="prop-name">Height</div><div class="prop-desc">Layer image height in pixels.</div></div>
+        <div class="prop-item"><div class="prop-name">Z-Index</div><div class="prop-desc">Current stacking order. Use layer panel controls to change.</div></div>
+      </div>
+      <div class="callout tip"><strong>Tip</strong> Changing X or Y via the inputs pushes an undo history entry when you leave the field.</div>
+    </section>
+
+    <!-- OPACITY -->
+    <section class="doc-section" id="s-props-opacity">
+      <h1 class="page-title">Opacity</h1>
+      <p class="page-subtitle">Control the transparency of any layer.</p>
+
+      <h2>Opacity Slider</h2>
+      <p>Range 0% (fully transparent) to 100% (fully opaque). Changes apply in real time. Opacity is preserved in PNG exports.</p>
+
+      <h2>Quick Presets</h2>
+      <ul>
+        <li><strong>50%</strong> — Half transparent for overlay/blend effects.</li>
+        <li><strong>100%</strong> — Restore full opacity.</li>
+      </ul>
+      <div class="callout"><strong>Note</strong> Opacity is stored as a decimal (0.0–1.0). It multiplies with any per-pixel alpha in the layer's image data.</div>
+    </section>
+
+    <!-- COLOR ANALYSIS -->
+    <section class="doc-section" id="s-props-color-analysis">
+      <h1 class="page-title">Color Analysis</h1>
+      <p class="page-subtitle">On-demand pixel frequency analysis of the selected layer.</p>
+
+      <h2>Modes</h2>
+      <div class="two-col">
+        <div class="card"><h4>Analyze RGB</h4><p>Counts pixels by RGB values. Ignores alpha — transparent pixels are counted at their solid color.</p></div>
+        <div class="card"><h4>Analyze RGBA</h4><p>Counts pixels by RGBA. Fully transparent pixels (alpha = 0) are excluded entirely.</p></div>
+      </div>
+
+      <h2>Results</h2>
+      <p>A virtually-scrolled list sorted by pixel count, showing: color swatch, hex code, pixel count, and percentage of total pixels.</p>
+      <p>Click <strong>Unload</strong> to free memory. Results clear automatically when you select a different layer.</p>
+    </section>
+
+    <!-- SHAPE PROPERTIES -->
+    <section class="doc-section" id="s-props-shape-props">
+      <h1 class="page-title">Shape Properties</h1>
+      <p class="page-subtitle">Live editing controls for shape layers in the Property Panel.</p>
+      <p>When a shape layer is selected the <strong>Shape Properties</strong> section appears. Changes re-rasterize the shape immediately.</p>
+      <div class="prop-list">
+        <div class="prop-item"><div class="prop-name">Shape Type</div><div class="prop-desc">Switch between: rectangle, circle, triangle, hexagon, octagon, star.</div></div>
+        <div class="prop-item"><div class="prop-name">Size</div><div class="prop-desc">Base size in pixels.</div></div>
+        <div class="prop-item"><div class="prop-name">Stretch X</div><div class="prop-desc">Horizontal scale (0.1–20.0).</div></div>
+        <div class="prop-item"><div class="prop-name">Stretch Y</div><div class="prop-desc">Vertical scale (0.1–20.0).</div></div>
+        <div class="prop-item"><div class="prop-name">Color</div><div class="prop-desc">Fill color hex code.</div></div>
+      </div>
+      <div class="callout tip"><strong>Tip</strong> Click the ◆ icon in the layer row (hover) to re-open the full Shape editor with canvas preview.</div>
+    </section>
+
+    <!-- BULK CONTROLS -->
+    <section class="doc-section" id="s-props-bulk">
+      <h1 class="page-title">Bulk Controls</h1>
+      <p class="page-subtitle">Apply operations to multiple selected layers at once.</p>
+      <p>When 2 or more layers are selected, the Property Panel shows <strong>Bulk Controls</strong> instead of single-layer properties.</p>
+      <h2>Offset X / Offset Y</h2>
+      <p>Enter a pixel offset and press <kbd>Enter</kbd>. Added to the current X (or Y) of every selected layer.</p>
+      <h2>Nudge Buttons</h2>
+      <p>Four arrow buttons (← → ↑ ↓) nudge all selected layers 1 pixel. Equivalent to pressing keyboard arrow keys.</p>
+    </section>
+
+    <!-- PIXELATOR -->
+    <section class="doc-section" id="s-tools-pixelator">
+      <h1 class="page-title">Pixelator / Resize</h1>
+      <p class="page-subtitle">Convert images to pixel art or resize them with palette matching and dithering. Open via <strong>Property Panel → Modify → Pixelator/Resize</strong>.</p>
+
+      <div class="callout"><strong>Processing runs in a background Web Worker</strong> — the UI stays responsive during computation.</div>
+
+      <h2>Resize Settings</h2>
+      <div class="prop-list">
+        <div class="prop-item"><div class="prop-name">Target Height</div><div class="prop-desc">Output height in pixels. Width is calculated to preserve aspect ratio. Presets: 64, 100, 128, 150, 200, 256, 300, 400, 512, 1000 px.</div></div>
+        <div class="prop-item"><div class="prop-name">Resampling</div><div class="prop-desc">
+          <code>nearest</code> — Fastest, pixel-art look (recommended).<br>
+          <code>bilinear</code> — Smooth interpolation.<br>
+          <code>lanczos</code> — Highest quality for photos.
+        </div></div>
+      </div>
+
+      <h2>Preprocessing</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Filter</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><strong>None</strong></td><td>No preprocessing. Best when source is already clean.</td></tr>
+            <tr><td><strong>Bilateral</strong></td><td>Edge-preserving smooth. Reduces noise, keeps sharp edges.</td></tr>
+            <tr><td><strong>Kuwahara</strong></td><td>Painterly effect. Flat regions with crisp boundaries — great for cartoon sources.</td></tr>
+            <tr><td><strong>Median</strong></td><td>Removes salt-and-pepper noise.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Preprocessing Strength:</strong> 0–100%. Higher = more pronounced effect.</p>
+
+      <h2>Palettes</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Palette</th><th>Colors</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><strong>GeoPixels</strong></td><td>29</td><td>Official GeoPixels game palette.</td></tr>
+            <tr><td><strong>WPlace</strong></td><td>63</td><td>Full WPlace game palette.</td></tr>
+            <tr><td><strong>WPlace Free</strong></td><td>31</td><td>WPlace Free palette subset.</td></tr>
+            <tr><td><strong>Custom</strong></td><td>User-defined</td><td>Enter hex codes manually or via eyedropper/gradient tools.</td></tr>
+            <tr><td><strong>GeoPixels + Custom</strong></td><td>29 + user</td><td>Combines GeoPixels with your custom colors.</td></tr>
+            <tr><td><strong>None</strong></td><td>—</td><td>No palette matching. Full color output.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Building a Custom Palette</h3>
+      <ul>
+        <li><strong>Type hex codes</strong> directly into the palette input.</li>
+        <li><strong>Eyedropper:</strong> Click pixels on the image to pick colors. Supports zoom/pan.</li>
+        <li><strong>Gradient Picker:</strong> Draw a line across the image; sampled colors along the line are added. Useful for gradients.</li>
+        <li><strong>GeoPixels Lookup:</strong> Enter a GeoPixels user ID to import their unlocked palette.</li>
+        <li><strong>K-means Auto-Palette:</strong> Auto-selects the N most representative colors via k-means clustering.</li>
+        <li><strong>Suggest Colors:</strong> Analyzes image and suggests top N visually distinct colors. Toggle "prefer distinct colors" for broader coverage.</li>
+        <li><strong>Filter Trivial Colors:</strong> Remove palette entries below a pixel-count or percentage threshold.</li>
+      </ul>
+
+      <h2>Color Matching Algorithms</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Algorithm</th><th>Quality</th><th>Best For</th></tr></thead>
+          <tbody>
+            <tr><td><strong>OKLab</strong></td><td>Excellent</td><td>General purpose. Recommended default.</td></tr>
+            <tr><td><strong>CIEDE2000</strong></td><td>Best</td><td>Skin tones, subtle hue variations.</td></tr>
+            <tr><td><strong>CIE94</strong></td><td>Very Good</td><td>Graphics and design work.</td></tr>
+            <tr><td><strong>CIE76</strong></td><td>Good</td><td>Euclidean Lab distance, simpler.</td></tr>
+            <tr><td><strong>Red Mean</strong></td><td>Acceptable</td><td>Fastest. Good for large palettes.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Dithering Algorithms</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Category</th><th>Algorithms</th></tr></thead>
+          <tbody>
+            <tr><td><strong>None</strong></td><td>Nearest-color match only</td></tr>
+            <tr><td><strong>Error-Diffusion</strong></td><td>Floyd-Steinberg, Burkes, Stucki, Sierra-2, Sierra Lite, Atkinson</td></tr>
+            <tr><td><strong>Ordered</strong></td><td>Bayer 4×4, Bayer 8×8</td></tr>
+            <tr><td><strong>Pattern</strong></td><td>Halftone Dot, Diagonal Line, Cross Hatch, Grid</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Dither Strength:</strong> 0–100%. Controls intensity. 0% = no dithering even if algorithm is selected.</p>
+
+      <h2>Before/After Comparison</h2>
+      <p>A drag slider reveals before/after side-by-side within the preview area.</p>
+
+      <h2>Auto-Update</h2>
+      <p>When enabled, the preview regenerates automatically as settings change. Disable for performance with large images.</p>
+    </section>
+
+    <!-- CROP -->
+    <section class="doc-section" id="s-tools-crop">
+      <h1 class="page-title">Crop</h1>
+      <p class="page-subtitle">Crop a layer to a sub-rectangle. Open via <strong>Property Panel → Modify → Crop</strong>.</p>
+
+      <h2>Crop Interface</h2>
+      <p>The modal shows the layer image with a moveable, resizable crop rectangle.</p>
+      <ul>
+        <li><strong>Drag the rectangle</strong> to move the entire crop selection.</li>
+        <li><strong>Drag any of the 8 handles</strong> (corners + mid-edges) to resize.</li>
+        <li><strong>Zoom in/out</strong> for pixel-level precision.</li>
+      </ul>
+
+      <h2>Applying</h2>
+      <p>Click <strong>Apply</strong> to commit. The layer's <code>imageData</code>, <code>x</code>, <code>y</code>, <code>width</code>, and <code>height</code> are all updated. If this is the only layer, the canvas auto-crops to the new bounds.</p>
+    </section>
+
+    <!-- BACKGROUND REMOVAL -->
+    <section class="doc-section" id="s-tools-bg-removal">
+      <h1 class="page-title">Background Removal</h1>
+      <p class="page-subtitle">Remove backgrounds using AI or manual tools. Open via <strong>Property Panel → Modify → Background Removal</strong>.</p>
+
+      <h2>AI Mode</h2>
+      <p>Uses the <strong>RMBG-1.4</strong> neural network (ONNX Runtime, runs 100% in the browser — no data sent to a server).</p>
+      <ul>
+        <li>First use downloads the model (~170 MB) with a progress bar. Cached in the browser after that.</li>
+        <li>Best for photos with clear subject/background separation.</li>
+      </ul>
+
+      <h2>Click Mode (Flood Fill)</h2>
+      <p>Click a pixel — the tool flood-fills connected similarly-colored pixels to transparent.</p>
+      <ul>
+        <li><strong>Tolerance slider:</strong> How far the color can differ before the fill stops. Default: 30. Higher = removes more area.</li>
+      </ul>
+
+      <h2>Brush Mode</h2>
+      <p>Paint over the image to erase pixels. Has a configurable brush radius and its own local undo/redo stack.</p>
+
+      <h2>Lasso Mode</h2>
+      <p>Draw a freehand polygon; the interior is erased on mouse release.</p>
+
+      <h2>Common Features</h2>
+      <ul>
+        <li>All modes work on a working copy — original is preserved until you click <strong>Apply</strong>.</li>
+        <li><strong>Reset</strong> reverts to the original image.</li>
+        <li>Canvas shows a checkerboard to visualize transparency.</li>
+        <li>Each mode has its own local undo/redo.</li>
+      </ul>
+    </section>
+
+    <!-- TRANSPARENCY MASK -->
+    <section class="doc-section" id="s-tools-transparency">
+      <h1 class="page-title">Transparency Mask</h1>
+      <p class="page-subtitle">Remove low-alpha pixels based on a threshold. Open via <strong>Property Panel → Modify → Transparency Mask</strong>.</p>
+
+      <h2>How It Works</h2>
+      <p>Any pixel whose alpha value is <strong>at or below the threshold</strong> becomes fully transparent. Pixels above the threshold keep their original color and alpha.</p>
+
+      <h2>Threshold Slider</h2>
+      <p>Range 0–255. A threshold of 0 removes only fully-transparent pixels. A threshold of 128 removes all pixels less than 50% opaque.</p>
+
+      <h2>Use Template Palette</h2>
+      <p>When enabled, the image is also quantized to the GeoPixels palette while the mask is applied — useful for palette-conformant sprites in one step.</p>
+
+      <h2>Applying</h2>
+      <p>Click <strong>Apply</strong> to write the result to the layer. If this is the only layer, the canvas auto-crops to the visible bounding box.</p>
+    </section>
+
+    <!-- EXPORT -->
+    <section class="doc-section" id="s-file-export">
+      <h1 class="page-title">Exporting</h1>
+      <p class="page-subtitle">Save your work as a PNG image or in the native .pixcomp format.</p>
+
+      <h2>Export PNG</h2>
+      <p><strong>Save → Export PNG.</strong> Composites all <em>visible</em> layers in z-order, applies opacities, and includes the background color (if set).</p>
+      <div class="prop-list">
+        <div class="prop-item"><div class="prop-name">Scale</div><div class="prop-desc">1× = pixel-for-pixel. 2× doubles both dimensions. Default: 1×.</div></div>
+        <div class="prop-item"><div class="prop-name">Filename</div><div class="prop-desc">Auto-named <code>{ProjectName}_{scale}x.png</code>.</div></div>
+      </div>
+      <div class="callout tip"><strong>Tip</strong> Canvas border and shadow are NOT rendered in exports — only pixels within the canvas bounds.</div>
+
+      <h2>Export .pixcomp</h2>
+      <p><strong>Save → Export .pixcomp file.</strong> Saves the complete project as a JSON file with all layer image data embedded as Base64. Filename: <code>{ProjectName}.pixcomp</code>.</p>
+    </section>
+
+    <!-- IMPORT -->
+    <section class="doc-section" id="s-file-import">
+      <h1 class="page-title">Importing</h1>
+      <p class="page-subtitle">Load projects or images into PixelConnect.</p>
+
+      <h2>Open File</h2>
+      <p><strong>Load → Open .pixcomp / image file.</strong> Accepts:</p>
+      <ul>
+        <li><strong>.pixcomp</strong> — Restores a full PixelConnect project (all layers, canvas settings, rulers, grid).</li>
+        <li><strong>PNG, JPG, GIF, BMP, WebP</strong> — Each image becomes a new layer.</li>
+      </ul>
+
+      <h2>Drag &amp; Drop</h2>
+      <p>Drag image files onto the canvas. Supported: PNG, JPG, GIF, WebP, SVG, BMP.</p>
+
+      <h2>Clipboard Paste</h2>
+      <p><kbd>Ctrl</kbd><kbd>V</kbd> pastes an image as a new layer, or plain text as a rasterized text layer.</p>
+
+      <h2>New Project</h2>
+      <p>The <strong>New Project</strong> button resets to a blank 3276×3276 canvas. If unsaved changes exist you will be prompted to confirm.</p>
+    </section>
+
+    <!-- BROWSER STORAGE -->
+    <section class="doc-section" id="s-file-browser-storage">
+      <h1 class="page-title">Browser Storage</h1>
+      <p class="page-subtitle">Save and load named projects directly in the browser using IndexedDB.</p>
+
+      <h2>Save to Browser</h2>
+      <p><strong>Save → Save to Browser</strong> stores the current project with a thumbnail to IndexedDB. Creates a named, persistent snapshot.</p>
+
+      <h2>Load from Browser</h2>
+      <p><strong>Load → Load from Browser</strong> opens the <strong>Saved Projects Manager</strong>, listing all saved projects with thumbnail, name, save date, file size, layer count, and canvas dimensions. From here you can <strong>Load</strong>, <strong>Rename</strong>, or <strong>Delete</strong> any project.</p>
+
+      <h2>Auto-Save Cache</h2>
+      <p>Separately, PixelConnect auto-saves the current project state to IndexedDB <strong>2 seconds</strong> after any change. This cache is auto-restored on the next page load — protecting against accidental tab closes or crashes.</p>
+      <div class="callout warn"><strong>Warning</strong> Browser storage is limited by your browser's quota. For long-term or cross-device storage, always export a <code>.pixcomp</code> file.</div>
+    </section>
+
+    <!-- KEYBOARD SHORTCUTS -->
+    <section class="doc-section" id="s-keyboard-shortcuts">
+      <h1 class="page-title">Keyboard Shortcuts</h1>
+      <p class="page-subtitle">Complete reference of all keyboard shortcuts.</p>
+
+      <h2>File</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Ctrl</kbd><kbd>S</kbd></td><td>Save project (export .pixcomp)</td></tr>
+          <tr><td><kbd>Ctrl</kbd><kbd>O</kbd></td><td>Open / load file</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>History</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Ctrl</kbd><kbd>Z</kbd></td><td>Undo</td></tr>
+          <tr><td><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Z</kbd></td><td>Redo</td></tr>
+          <tr><td><kbd>Ctrl</kbd><kbd>Y</kbd></td><td>Redo (alternate)</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>Selection</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Ctrl</kbd><kbd>A</kbd></td><td>Select all layers</td></tr>
+          <tr><td><kbd>Ctrl</kbd><kbd>D</kbd></td><td>Deselect all layers</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>Clipboard</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Ctrl</kbd><kbd>C</kbd></td><td>Copy selected layers (internal + system clipboard)</td></tr>
+          <tr><td><kbd>Ctrl</kbd><kbd>V</kbd></td><td>Paste (image or text from system clipboard, or internal clipboard)</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>Layers</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Delete</kbd> or <kbd>Backspace</kbd></td><td>Delete selected layers (with confirmation)</td></tr>
+          <tr><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td>Nudge selected layers 1 pixel. Hold for continuous.</td></tr>
+          <tr><td><kbd>Shift</kbd><kbd>↑</kbd></td><td>Reorder selected layer(s) up one position</td></tr>
+          <tr><td><kbd>Shift</kbd><kbd>↓</kbd></td><td>Reorder selected layer(s) down one position</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>Viewport</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>+</kbd> / <kbd>=</kbd></td><td>Zoom in one level</td></tr>
+          <tr><td><kbd>-</kbd></td><td>Zoom out one level</td></tr>
+          <tr><td><kbd>0</kbd></td><td>Reset zoom to 100%</td></tr>
+          <tr><td>Scroll wheel</td><td>Zoom in/out through preset levels</td></tr>
+          <tr><td>Middle-click drag</td><td>Pan the canvas</td></tr>
+          <tr><td><kbd>Space</kbd> + drag</td><td>Temporarily pan while held</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>Debug</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd></td><td>Open Debug History Modal</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- UNDO/REDO -->
+    <section class="doc-section" id="s-history-undo">
+      <h1 class="page-title">Undo &amp; Redo</h1>
+      <p class="page-subtitle">Step through editing history to correct mistakes or revisit earlier states.</p>
+
+      <h2>Controls</h2>
+      <p>The <strong>↶ undo</strong> and <strong>↷ redo</strong> buttons in the toolbar show tooltip counts of available steps. Keyboard: <kbd>Ctrl</kbd><kbd>Z</kbd> / <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Z</kbd> or <kbd>Ctrl</kbd><kbd>Y</kbd>.</p>
+
+      <h2>What Is Tracked</h2>
+      <p>History captures the full <strong>project state</strong>: all layer data, canvas settings, grid, rulers. The viewport (zoom/pan) is intentionally <em>excluded</em> so it is preserved across undo/redo.</p>
+
+      <h2>History Limits</h2>
+      <ul>
+        <li>Maximum <strong>50 steps</strong> retained. Older steps are discarded at the limit.</li>
+        <li>History is in-memory only — not persisted to disk or .pixcomp files.</li>
+      </ul>
+
+      <h2>Auto-History</h2>
+      <p>Changes are <strong>debounced 500ms</strong> before committing to history. Rapid edits naturally group into single history steps. A layer drag commits one history entry for the entire move.</p>
+    </section>
+
+    <!-- AUTOSAVE -->
+    <section class="doc-section" id="s-history-autosave">
+      <h1 class="page-title">Auto-Save</h1>
+      <p class="page-subtitle">Your project is continuously and automatically saved to the browser.</p>
+
+      <h2>How It Works</h2>
+      <p>PixelConnect saves the current project to IndexedDB <strong>2 seconds</strong> after any change. On the next page load the auto-saved state is automatically restored — protecting against tab closes or crashes.</p>
+
+      <h2>Exclusions</h2>
+      <p>Preview layers from the Text and Shape editors (<code>__text_canvas_preview__</code>, <code>__shape_canvas_preview__</code>) are stripped before saving.</p>
+
+      <h2>Dirty State</h2>
+      <p>When there are unsaved changes the tab title is prefixed with <strong>●</strong> (e.g. <code>● MyProject - PixelConnect</code>). The browser <code>beforeunload</code> warning fires if you try to close the tab. The dirty flag clears when you <strong>Save to Browser</strong> or <strong>Export .pixcomp</strong>.</p>
+    </section>
+
+    <!-- DEBUG -->
+    <section class="doc-section" id="s-history-debug">
+      <h1 class="page-title">Debug Menu</h1>
+      <p class="page-subtitle">A developer tool showing the full internal history stack.</p>
+
+      <h2>Accessing</h2>
+      <p>Press <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd> to open the Debug History Modal.</p>
+
+      <h2>Contents</h2>
+      <p>Shows the complete past history stack, current project state, and redo future stack. Useful for diagnosing unexpected undo behavior.</p>
+      <div class="callout warn"><strong>Developer use only</strong> This modal is not part of the normal user workflow.</div>
+    </section>
+
+    <!-- PIXCOMP FORMAT -->
+    <section class="doc-section" id="s-data-pixcomp">
+      <h1 class="page-title">Project File (.pixcomp)</h1>
+      <p class="page-subtitle">The native PixelConnect project format — a human-readable JSON file.</p>
+
+      <h2>Structure</h2>
+      <pre><code>{
+  "version": "1.0.0",
+  "projectName": "My Pixel Art",
+  "created":  "2026-03-05T12:00:00.000Z",
+  "modified": "2026-03-05T14:30:00.000Z",
+  "canvas": { ... },
+  "viewport": { "zoom": 100, "panX": 0, "panY": 0 },
+  "grid": { "enabled": false, "density": 4 },
+  "rulers": { "enabled": false, "guides": [] },
+  "layers": [ ... ],
+  "metadata": { "author": "", "description": "", "tags": [] }
+}</code></pre>
+
+      <h2>Canvas Object Fields</h2>
+      <div class="prop-list">
+        <div class="prop-item"><div class="prop-name">width / height</div><div class="prop-desc">Canvas dimensions in pixels.</div></div>
+        <div class="prop-item"><div class="prop-name">backgroundColor</div><div class="prop-desc">Hex string or <code>null</code> for transparent.</div></div>
+        <div class="prop-item"><div class="prop-name">borderColor</div><div class="prop-desc">Hex string. Default <code>"#000000"</code>.</div></div>
+        <div class="prop-item"><div class="prop-name">borderWidth</div><div class="prop-desc">Integer px.</div></div>
+        <div class="prop-item"><div class="prop-name">borderOpacity</div><div class="prop-desc">Float 0.0–1.0.</div></div>
+        <div class="prop-item"><div class="prop-name">borderEnabled</div><div class="prop-desc">Boolean.</div></div>
+        <div class="prop-item"><div class="prop-name">shadowIntensity</div><div class="prop-desc">Float 0.0–1.0.</div></div>
+        <div class="prop-item"><div class="prop-name">showCheckeredBackground</div><div class="prop-desc">Boolean.</div></div>
+        <div class="prop-item"><div class="prop-name">dragInfoEnabled</div><div class="prop-desc">Boolean — show/hide drag delta tooltip.</div></div>
+      </div>
+
+      <h2>Version Compatibility</h2>
+      <p>Minimum supported version: <strong>1.0.0</strong>. Loading a file with an unsupported version reports an error. Required fields on load: <code>version</code>, <code>canvas</code>, <code>layers</code>, <code>viewport</code>, <code>grid</code>, <code>rulers</code>. Each layer is also validated for required fields.</p>
+    </section>
+
+    <!-- LAYER SCHEMA -->
+    <section class="doc-section" id="s-data-layer-schema">
+      <h1 class="page-title">Layer Schema</h1>
+      <p class="page-subtitle">All fields on a layer object in the .pixcomp format.</p>
+
+      <h2>Core Fields (all layer types)</h2>
+      <div class="prop-list">
+        <div class="prop-item"><div class="prop-name">id</div><div class="prop-desc">UUID string. Unique identifier.</div><div class="prop-type">string</div></div>
+        <div class="prop-item"><div class="prop-name">name</div><div class="prop-desc">Display name shown in the Layer Panel.</div><div class="prop-type">string</div></div>
+        <div class="prop-item"><div class="prop-name">imageData</div><div class="prop-desc">Base64-encoded PNG data URI of the rasterized layer image.</div><div class="prop-type">string</div></div>
+        <div class="prop-item"><div class="prop-name">x</div><div class="prop-desc">Left edge in canvas pixels. May be negative.</div><div class="prop-type">number</div></div>
+        <div class="prop-item"><div class="prop-name">y</div><div class="prop-desc">Top edge in canvas pixels. May be negative.</div><div class="prop-type">number</div></div>
+        <div class="prop-item"><div class="prop-name">width</div><div class="prop-desc">Image width in pixels.</div><div class="prop-type">number</div></div>
+        <div class="prop-item"><div class="prop-name">height</div><div class="prop-desc">Image height in pixels.</div><div class="prop-type">number</div></div>
+        <div class="prop-item"><div class="prop-name">zIndex</div><div class="prop-desc">Stacking order integer. Higher = visually in front.</div><div class="prop-type">number</div></div>
+        <div class="prop-item"><div class="prop-name">visible</div><div class="prop-desc">Whether the layer is shown and included in exports.</div><div class="prop-type">boolean</div></div>
+        <div class="prop-item"><div class="prop-name">locked</div><div class="prop-desc">Prevents mouse-drag repositioning.</div><div class="prop-type">boolean</div></div>
+        <div class="prop-item"><div class="prop-name">opacity</div><div class="prop-desc">Layer transparency. 0.0 = invisible, 1.0 = fully opaque.</div><div class="prop-type">number</div></div>
+      </div>
+
+      <h2>Text Layer Fields (optional)</h2>
+      <div class="prop-list">
+        <div class="prop-item"><div class="prop-name">textContent</div><div class="prop-desc">Raw text with <code>\n</code> line breaks.</div><div class="prop-type">string</div></div>
+        <div class="prop-item"><div class="prop-name">fontSize</div><div class="prop-desc">Font size in pixels.</div><div class="prop-type">number</div></div>
+        <div class="prop-item"><div class="prop-name">fontFamily</div><div class="prop-desc">CSS font-family string.</div><div class="prop-type">string</div></div>
+        <div class="prop-item"><div class="prop-name">fontColor</div><div class="prop-desc">Hex color string.</div><div class="prop-type">string</div></div>
+        <div class="prop-item"><div class="prop-name">textAlign</div><div class="prop-desc"><code>'left'</code>, <code>'center'</code>, or <code>'right'</code>.</div><div class="prop-type">string</div></div>
+        <div class="prop-item"><div class="prop-name">disableTransparency</div><div class="prop-desc">When true, text edges are hard (no anti-aliasing).</div><div class="prop-type">boolean</div></div>
+        <div class="prop-item"><div class="prop-name">lineHeight</div><div class="prop-desc">Line height multiplier. Default 1.2.</div><div class="prop-type">number</div></div>
+        <div class="prop-item"><div class="prop-name">letterSpacing</div><div class="prop-desc">Extra letter spacing in pixels.</div><div class="prop-type">number</div></div>
+        <div class="prop-item"><div class="prop-name">fontWeight</div><div class="prop-desc"><code>'normal'</code>, <code>'bold'</code>, or <code>'300'</code>.</div><div class="prop-type">string</div></div>
+      </div>
+
+      <h2>Shape Layer Fields (optional)</h2>
+      <div class="prop-list">
+        <div class="prop-item"><div class="prop-name">shapeType</div><div class="prop-desc"><code>'rectangle'</code>, <code>'circle'</code>, <code>'triangle'</code>, <code>'hexagon'</code>, <code>'octagon'</code>, or <code>'star'</code>.</div><div class="prop-type">string</div></div>
+        <div class="prop-item"><div class="prop-name">shapeSize</div><div class="prop-desc">Base size in pixels.</div><div class="prop-type">number</div></div>
+        <div class="prop-item"><div class="prop-name">shapeStretchX</div><div class="prop-desc">Horizontal scale multiplier (0.1–20.0).</div><div class="prop-type">number</div></div>
+        <div class="prop-item"><div class="prop-name">shapeStretchY</div><div class="prop-desc">Vertical scale multiplier (0.1–20.0).</div><div class="prop-type">number</div></div>
+        <div class="prop-item"><div class="prop-name">shapeColor</div><div class="prop-desc">Hex fill color string.</div><div class="prop-type">string</div></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<button id="back-to-top" aria-label="Back to top" title="Back to top">↑</button>
+
+<script>
+(function() {
+  const sections = document.querySelectorAll('.doc-section');
+  const navLinks  = document.querySelectorAll('[data-section]');
+
+  function showSection(id) {
+    sections.forEach(s => s.classList.toggle('active', s.id === 's-' + id));
+    navLinks.forEach(a => {
+      const match = a.dataset.section === id;
+      a.classList.toggle('active', match);
+      if (match) {
+        const details = a.closest('details');
+        if (details) details.open = true;
+      }
+    });
+    window.scrollTo(0, 0);
+    history.replaceState(null, '', '#' + id);
+  }
+
+  navLinks.forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      showSection(a.dataset.section);
+      if (window.innerWidth <= 700) {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('open');
+      }
+    });
+  });
+
+  const hash = location.hash.replace('#', '');
+  if (hash) showSection(hash);
+
+  const hamburger = document.getElementById('hamburger-btn');
+  const sidebar   = document.getElementById('sidebar');
+  const overlay   = document.getElementById('sidebar-overlay');
+
+  hamburger.addEventListener('click', () => {
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('open');
+  });
+  overlay.addEventListener('click', () => {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('open');
+  });
+
+  const btt = document.getElementById('back-to-top');
+  window.addEventListener('scroll', () => btt.classList.toggle('visible', window.scrollY > 300));
+  btt.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+})();
+</script>
+</body>
+</html>

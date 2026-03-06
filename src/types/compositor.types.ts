@@ -15,6 +15,8 @@ export interface CanvasConfig {
   shadowIntensity: number; // 0-1, shadow opacity/intensity
   showCheckeredBackground: boolean; // Show checkerboard pattern for transparency
   dragInfoEnabled: boolean; // Show drag translation info when dragging layers
+  exportBorderEnabled: boolean; // Draw a 1px border rect on the exported PNG
+  exportBorderColor: string; // Hex color for the export border (default #FF0000)
 }
 
 

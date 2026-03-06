@@ -225,6 +225,14 @@ function CanvasRenderer() {
       
       // console.log(`[DEBUG] Layer rendered: ${layer.name} at (${x}, ${y}) with opacity ${ctx.globalAlpha}`);
     }
+
+    // Draw 1px export border preview on top of all layers
+    if (project.canvas.exportBorderEnabled) {
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = project.canvas.exportBorderColor ?? '#FF0000';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
+    }
   }, [project, loadedImages, isDraggingLayer, dragLayerId, dragOffsetX, dragOffsetY]);
 
   /**
