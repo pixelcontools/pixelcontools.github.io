@@ -64,10 +64,10 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   // State
   const [targetHeight, setTargetHeight] = useState<number>(128);
   const [originalHeight, setOriginalHeight] = useState<number>(128);
-  const [resamplingMethod, setResamplingMethod] = useState<'nearest' | 'bilinear' | 'lanczos'>('bilinear');
+  const [resamplingMethod, setResamplingMethod] = useState<'nearest' | 'bilinear' | 'lanczos' | 'pixeloe-contrast' | 'pixeloe-k-centroid'>('bilinear');
   const [ditherMethod, setDitherMethod] = useState<string>('none');
   const [ditherStrength, setDitherStrength] = useState<number>(100);
-  const [preprocessingMethod, setPreprocessingMethod] = useState<'none' | 'bilateral' | 'kuwahara' | 'median'>('none');
+  const [preprocessingMethod, setPreprocessingMethod] = useState<'none' | 'bilateral' | 'kuwahara' | 'median' | 'edge-detect'>('none');
   const [preprocessingStrength, setPreprocessingStrength] = useState<number>(50);
   const [paletteMode, setPaletteMode] = useState<'geopixels' | 'wplace' | 'wplace-free' | 'custom' | 'geopixels+custom' | 'none'>('geopixels');
   const [customPaletteInput, setCustomPaletteInput] = useState<string>('');
@@ -107,6 +107,14 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const [saturation, setSaturation] = useState<number>(0);
   const [colorMatchAlgorithm, setColorMatchAlgorithm] = useState<string>('oklab');
   const [preserveDetailThreshold, setPreserveDetailThreshold] = useState<number>(0);
+
+  // PixelOE settings
+  const [pixeloeThickness, setPixeloeThickness] = useState<number>(2);
+  const [pixeloePatchSize, setPixeloePatchSize] = useState<number>(16);
+
+  // Edge detection settings
+  const [edgeDetectBlur, setEdgeDetectBlur] = useState<number>(0);
+  const [edgeDetectAlgorithm, setEdgeDetectAlgorithm] = useState<'sobel' | 'scharr' | 'laplacian'>('sobel');
 
   // Eyedropper modal state
   const [isEyedropperOpen, setIsEyedropperOpen] = useState<boolean>(false);
@@ -371,13 +379,17 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           trivialThresholdMode,
           colorMatchAlgorithm,
           preserveDetailThreshold,
+          pixeloeThickness,
+          pixeloePatchSize,
+          edgeDetectBlur,
+          edgeDetectAlgorithm,
           colorStats: []
         }
       });
     };
     img.src = layer.imageData;
 
-  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm, preserveDetailThreshold, createWorker]);
+  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm, preserveDetailThreshold, pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm, createWorker]);
 
   // Debounced Effect
   useEffect(() => {
@@ -410,6 +422,10 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     trivialThresholdMode,
     colorMatchAlgorithm,
     preserveDetailThreshold,
+    pixeloeThickness,
+    pixeloePatchSize,
+    edgeDetectBlur,
+    edgeDetectAlgorithm,
     processImage
   ]);
 
@@ -719,7 +735,51 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                   <option value="nearest">Nearest Neighbor (Sharp)</option>
                   <option value="bilinear">Bilinear (Smooth)</option>
                   <option value="lanczos">Lanczos (High Quality)</option>
+                  <option value="pixeloe-contrast">⚠️ PixelOE Contrast (Experimental)</option>
+                  <option value="pixeloe-k-centroid">⚠️ PixelOE K-Centroid (Experimental)</option>
                 </select>
+                {(resamplingMethod === 'pixeloe-contrast' || resamplingMethod === 'pixeloe-k-centroid') && (
+                  <div className="mt-2 space-y-2 bg-yellow-900/20 border border-yellow-700/50 rounded p-2">
+                    <div className="flex items-center gap-1 text-xs text-yellow-400 font-semibold">
+                      <span>⚠️</span>
+                      <span>PixelOE — Outline-Aware Pixelization</span>
+                    </div>
+                    <p className="text-xs text-yellow-300/70">
+                      {resamplingMethod === 'pixeloe-contrast'
+                        ? 'Contrast-aware downscaling in LAB space. Preserves dark/bright details by adaptively selecting pixels per patch.'
+                        : 'K-means clustering per tile to find the dominant color. Produces clean, flat pixel art.'}
+                    </p>
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-400">
+                        <span>Outline Thickness</span>
+                        <span>{pixeloeThickness}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="4"
+                        value={pixeloeThickness}
+                        onChange={(e) => setPixeloeThickness(Number(e.target.value))}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-400">
+                        <span>Patch Size</span>
+                        <span>{pixeloePatchSize}px</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="4"
+                        max="32"
+                        step="4"
+                        value={pixeloePatchSize}
+                        onChange={(e) => setPixeloePatchSize(Number(e.target.value))}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="text-xs text-gray-500">Color Matching</label>
@@ -1224,6 +1284,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                       <option value="kuwahara">Kuwahara (Oil Paint / Flatten)</option>
                       <option value="median">Median (De-noise / Smooth)</option>
                       <option value="bilateral">Bilateral (Soft Blur)</option>
+                      <option value="edge-detect">Edge Detect (Outline Overlay)</option>
                     </select>
 
                     {preprocessingMethod !== 'none' && (
@@ -1244,7 +1305,40 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                           {preprocessingMethod === 'bilateral' && 'Smooths surfaces while keeping edges. Good for photographs.'}
                           {preprocessingMethod === 'kuwahara' && 'Best for Pixel Art. Creates flat, "painted" clusters of color.'}
                           {preprocessingMethod === 'median' && 'Removes noise and small details. Great for cleaning up JPEGs before pixelating.'}
+                          {preprocessingMethod === 'edge-detect' && 'Overlays detected edges as dark lines onto the image. Helps outlines survive downscaling.'}
                         </p>
+
+                        {preprocessingMethod === 'edge-detect' && (
+                          <div className="mt-3 space-y-2 border-t border-gray-700 pt-2">
+                            <div>
+                              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                <span>Blurring</span>
+                                <span>{edgeDetectBlur}px</span>
+                              </div>
+                              <input
+                                type="range"
+                                min="0"
+                                max="10"
+                                value={edgeDetectBlur}
+                                onChange={(e) => { debounceTimeRef.current = 100; setEdgeDetectBlur(Number(e.target.value)); }}
+                                className="w-full"
+                              />
+                              <p className="text-xs text-gray-600 mt-1">Pre-blur before detection. Higher = only bold edges, lower = fine detail edges.</p>
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500">Algorithm</label>
+                              <select
+                                value={edgeDetectAlgorithm}
+                                onChange={(e) => { debounceTimeRef.current = 100; setEdgeDetectAlgorithm(e.target.value as any); }}
+                                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
+                              >
+                                <option value="sobel">Sobel (General Purpose)</option>
+                                <option value="scharr">Scharr (Bold Edges)</option>
+                                <option value="laplacian">Laplacian (Thin Lines)</option>
+                              </select>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

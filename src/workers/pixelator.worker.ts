@@ -1104,6 +1104,608 @@ function applyKuwaharaFilter(imageData: ImageData, strength: number): ImageData 
   return dest;
 }
 
+// --- Edge Detection Preprocessing ---
+
+function applyEdgeDetection(imageData: ImageData, strength: number, blurRadius: number, algorithm: string): ImageData {
+  const src = imageData.data;
+  const width = imageData.width;
+  const height = imageData.height;
+  const dest = new ImageData(new Uint8ClampedArray(src), width, height);
+  const destData = dest.data;
+
+  // Convert to grayscale for edge detection
+  let gray = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      gray[y * width + x] = 0.299 * src[idx] + 0.587 * src[idx + 1] + 0.114 * src[idx + 2];
+    }
+  }
+
+  // Apply Gaussian blur before edge detection to suppress noise
+  if (blurRadius > 0) {
+    const radius = Math.max(1, Math.round(blurRadius));
+    const sigma = radius / 2;
+    const kernelSize = radius * 2 + 1;
+    const kernel = new Float32Array(kernelSize);
+    let kernelSum = 0;
+    for (let i = 0; i < kernelSize; i++) {
+      const x = i - radius;
+      kernel[i] = Math.exp(-(x * x) / (2 * sigma * sigma));
+      kernelSum += kernel[i];
+    }
+    for (let i = 0; i < kernelSize; i++) kernel[i] /= kernelSum;
+
+    // Separable Gaussian: horizontal pass
+    const temp = new Float32Array(width * height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let sum = 0;
+        for (let k = -radius; k <= radius; k++) {
+          const sx = Math.min(width - 1, Math.max(0, x + k));
+          sum += gray[y * width + sx] * kernel[k + radius];
+        }
+        temp[y * width + x] = sum;
+      }
+    }
+    // Vertical pass
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let sum = 0;
+        for (let k = -radius; k <= radius; k++) {
+          const sy = Math.min(height - 1, Math.max(0, y + k));
+          sum += temp[sy * width + x] * kernel[k + radius];
+        }
+        gray[y * width + x] = sum;
+      }
+    }
+  }
+
+  // Edge detection with selected algorithm
+  const edgeMag = new Float32Array(width * height);
+  let maxMag = 0;
+
+  if (algorithm === 'laplacian') {
+    // Laplacian (8-connected): second-derivative edge detection in all directions
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const tl = gray[(y - 1) * width + (x - 1)];
+        const tc = gray[(y - 1) * width + x];
+        const tr = gray[(y - 1) * width + (x + 1)];
+        const ml = gray[y * width + (x - 1)];
+        const mc = gray[y * width + x];
+        const mr = gray[y * width + (x + 1)];
+        const bl = gray[(y + 1) * width + (x - 1)];
+        const bc = gray[(y + 1) * width + x];
+        const br = gray[(y + 1) * width + (x + 1)];
+        const mag = Math.abs(-8 * mc + tl + tc + tr + ml + mr + bl + bc + br);
+        edgeMag[y * width + x] = mag;
+        if (mag > maxMag) maxMag = mag;
+      }
+    }
+  } else {
+    // Sobel: [1,2,1] center weight — general purpose
+    // Scharr: [3,10,3] center weight — bolder, thicker edges with better rotational symmetry
+    const w1 = algorithm === 'scharr' ? 3 : 1;
+    const w2 = algorithm === 'scharr' ? 10 : 2;
+
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const tl = gray[(y - 1) * width + (x - 1)];
+        const tc = gray[(y - 1) * width + x];
+        const tr = gray[(y - 1) * width + (x + 1)];
+        const ml = gray[y * width + (x - 1)];
+        const mr = gray[y * width + (x + 1)];
+        const bl = gray[(y + 1) * width + (x - 1)];
+        const bc = gray[(y + 1) * width + x];
+        const br = gray[(y + 1) * width + (x + 1)];
+
+        const gx = -w1 * tl - w2 * ml - w1 * bl + w1 * tr + w2 * mr + w1 * br;
+        const gy = -w1 * tl - w2 * tc - w1 * tr + w1 * bl + w2 * bc + w1 * br;
+        const mag = Math.sqrt(gx * gx + gy * gy);
+        edgeMag[y * width + x] = mag;
+        if (mag > maxMag) maxMag = mag;
+      }
+    }
+  }
+
+  // Normalize using 95th percentile instead of max to avoid outlier noise washing out edges
+  const allMags: number[] = [];
+  for (let i = 0; i < edgeMag.length; i++) {
+    if (edgeMag[i] > 0) allMags.push(edgeMag[i]);
+  }
+  allMags.sort((a, b) => a - b);
+  const normFactor = allMags.length > 0 ? allMags[Math.floor(allMags.length * 0.95)] : 1;
+  if (normFactor === 0) return dest;
+
+  const blendFactor = strength / 100;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const normalized = Math.min(1, edgeMag[y * width + x] / normFactor);
+      const edgeDarken = 1 - normalized * blendFactor;
+      destData[idx] = Math.round(src[idx] * edgeDarken);
+      destData[idx + 1] = Math.round(src[idx + 1] * edgeDarken);
+      destData[idx + 2] = Math.round(src[idx + 2] * edgeDarken);
+      destData[idx + 3] = src[idx + 3];
+    }
+  }
+  return dest;
+}
+
+// --- PixelOE: Contrast-Aware Outline Expansion & Downscaling ---
+
+function sigmoid(x: number): number {
+  return 1 / (1 + Math.exp(-x));
+}
+
+/** Morphological erosion with a 3x3 full kernel */
+function erodeChannel(data: Float32Array, w: number, h: number, iterations: number): Float32Array {
+  let current = data;
+  for (let iter = 0; iter < iterations; iter++) {
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let minVal = 255;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const ny = Math.min(h - 1, Math.max(0, y + dy));
+            const nx = Math.min(w - 1, Math.max(0, x + dx));
+            const v = current[ny * w + nx];
+            if (v < minVal) minVal = v;
+          }
+        }
+        out[y * w + x] = minVal;
+      }
+    }
+    current = out;
+  }
+  return current;
+}
+
+/** Morphological dilation with a 3x3 full kernel */
+function dilateChannel(data: Float32Array, w: number, h: number, iterations: number): Float32Array {
+  let current = data;
+  for (let iter = 0; iter < iterations; iter++) {
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let maxVal = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const ny = Math.min(h - 1, Math.max(0, y + dy));
+            const nx = Math.min(w - 1, Math.max(0, x + dx));
+            const v = current[ny * w + nx];
+            if (v > maxVal) maxVal = v;
+          }
+        }
+        out[y * w + x] = maxVal;
+      }
+    }
+    current = out;
+  }
+  return current;
+}
+
+/** Morphological erosion with a 3x3 cross kernel (diamond shape) */
+function erodeCross(data: Float32Array, w: number, h: number, iterations: number): Float32Array {
+  const offsets = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
+  let current = data;
+  for (let iter = 0; iter < iterations; iter++) {
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let minVal = 255;
+        for (const [dx, dy] of offsets) {
+          const ny = Math.min(h - 1, Math.max(0, y + dy));
+          const nx = Math.min(w - 1, Math.max(0, x + dx));
+          const v = current[ny * w + nx];
+          if (v < minVal) minVal = v;
+        }
+        out[y * w + x] = minVal;
+      }
+    }
+    current = out;
+  }
+  return current;
+}
+
+/** Morphological dilation with a 3x3 cross kernel */
+function dilateCross(data: Float32Array, w: number, h: number, iterations: number): Float32Array {
+  const offsets = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
+  let current = data;
+  for (let iter = 0; iter < iterations; iter++) {
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let maxVal = 0;
+        for (const [dx, dy] of offsets) {
+          const ny = Math.min(h - 1, Math.max(0, y + dy));
+          const nx = Math.min(w - 1, Math.max(0, x + dx));
+          const v = current[ny * w + nx];
+          if (v > maxVal) maxVal = v;
+        }
+        out[y * w + x] = maxVal;
+      }
+    }
+    current = out;
+  }
+  return current;
+}
+
+/** Apply a sliding-window reducer function over a 2D channel.
+ *  Equivalent to PixelOE's apply_chunk — unfolds patches, applies func, folds back. */
+function applyChunk(
+  data: Float32Array, w: number, h: number,
+  kernel: number, stride: number,
+  func: (patches: Float32Array[]) => number[]
+): Float32Array {
+  const kShift = Math.max(kernel - stride, 0);
+  const padBefore = Math.floor(kShift / 2);
+  const padAfter = padBefore + (kShift % 2);
+
+  // Pad with edge replication
+  const pw = w + padBefore + padAfter;
+  const ph = h + padBefore + padAfter;
+  const padded = new Float32Array(pw * ph);
+  for (let y = 0; y < ph; y++) {
+    const sy = Math.min(h - 1, Math.max(0, y - padBefore));
+    for (let x = 0; x < pw; x++) {
+      const sx = Math.min(w - 1, Math.max(0, x - padBefore));
+      padded[y * pw + x] = data[sy * w + sx];
+    }
+  }
+
+  // Extract patches and apply function
+  const outH = Math.floor((ph - kernel) / stride) + 1;
+  const outW = Math.floor((pw - kernel) / stride) + 1;
+  const patchSize = kernel * kernel;
+  const patches: Float32Array[] = [];
+
+  for (let py = 0; py < outH; py++) {
+    for (let px = 0; px < outW; px++) {
+      const patch = new Float32Array(patchSize);
+      let idx = 0;
+      for (let ky = 0; ky < kernel; ky++) {
+        for (let kx = 0; kx < kernel; kx++) {
+          patch[idx++] = padded[(py * stride + ky) * pw + (px * stride + kx)];
+        }
+      }
+      patches.push(patch);
+    }
+  }
+
+  const results = func(patches);
+
+  // Fold results back into output
+  const output = new Float32Array(w * h);
+  let patchIdx = 0;
+  for (let py = 0; py < outH; py++) {
+    for (let px = 0; px < outW; px++) {
+      // Each result maps to a stride x stride region
+      for (let sy = 0; sy < stride && py * stride + sy < h; sy++) {
+        for (let sx = 0; sx < stride && px * stride + sx < w; sx++) {
+          const oy = py * stride + sy;
+          const ox = px * stride + sx;
+          if (oy < h && ox < w) {
+            output[oy * w + ox] = results[patchIdx];
+          }
+        }
+      }
+      patchIdx++;
+    }
+  }
+  return output;
+}
+
+function patchMedian(patch: Float32Array): number {
+  const sorted = Float32Array.from(patch).sort();
+  return sorted[Math.floor(sorted.length / 2)];
+}
+function patchMax(patch: Float32Array): number {
+  let m = -Infinity;
+  for (let i = 0; i < patch.length; i++) if (patch[i] > m) m = patch[i];
+  return m;
+}
+function patchMin(patch: Float32Array): number {
+  let m = Infinity;
+  for (let i = 0; i < patch.length; i++) if (patch[i] < m) m = patch[i];
+  return m;
+}
+function patchMean(patch: Float32Array): number {
+  let s = 0;
+  for (let i = 0; i < patch.length; i++) s += patch[i];
+  return s / patch.length;
+}
+
+/** Compute the expansion weight map (PixelOE expansion_weight) */
+function computeExpansionWeight(
+  grayChannel: Float32Array, w: number, h: number,
+  k: number, avgScale: number, distScale: number
+): Float32Array {
+  const stride = Math.max(2, Math.floor(k / 4) * 2);
+
+  const avgY = applyChunk(grayChannel, w, h, k * 2, stride,
+    (patches) => patches.map(p => patchMedian(p)));
+  const maxY = applyChunk(grayChannel, w, h, k, stride,
+    (patches) => patches.map(p => patchMax(p)));
+  const minY = applyChunk(grayChannel, w, h, k, stride,
+    (patches) => patches.map(p => patchMin(p)));
+
+  const weight = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const brightDist = maxY[i] - avgY[i];
+    const darkDist = avgY[i] - minY[i];
+    const wVal = (avgY[i] - 0.5) * avgScale - (brightDist - darkDist) * distScale;
+    weight[i] = sigmoid(wVal);
+  }
+
+  // Normalize to 0-1
+  let minW = Infinity, maxW = -Infinity;
+  for (let i = 0; i < weight.length; i++) {
+    if (weight[i] < minW) minW = weight[i];
+    if (weight[i] > maxW) maxW = weight[i];
+  }
+  const range = maxW > 0 ? maxW : 1;
+  for (let i = 0; i < weight.length; i++) {
+    weight[i] = (weight[i] - minW) / range;
+  }
+
+  return weight;
+}
+
+/** PixelOE outline expansion — operates on full RGB ImageData, returns expanded ImageData */
+function pixeloeOutlineExpansion(imageData: ImageData, erodeIter: number, dilateIter: number, k: number): ImageData {
+  const w = imageData.width;
+  const h = imageData.height;
+  const src = imageData.data;
+
+  // Extract grayscale (luminance) normalized to 0-1
+  const gray = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const idx = i * 4;
+    // Use L from approximate LAB (perceptual luminance)
+    gray[i] = (0.299 * src[idx] + 0.587 * src[idx + 1] + 0.114 * src[idx + 2]) / 255;
+  }
+
+  const weight = computeExpansionWeight(gray, w, h, k, 10, 3);
+  const origWeight = new Float32Array(w * h);
+  for (let i = 0; i < weight.length; i++) {
+    origWeight[i] = sigmoid((weight[i] - 0.5) * 5) * 0.25;
+  }
+
+  // Process each channel: erode, dilate, blend
+  const result = new ImageData(w, h);
+  const destData = result.data;
+
+  for (let c = 0; c < 3; c++) {
+    const channel = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) channel[i] = src[i * 4 + c];
+
+    const eroded = erodeChannel(channel, w, h, erodeIter);
+    const dilated = dilateChannel(channel, w, h, dilateIter);
+
+    // Blend: eroded * weight + dilated * (1-weight), then blend with original
+    const blended = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      const mixed = eroded[i] * weight[i] + dilated[i] * (1 - weight[i]);
+      blended[i] = mixed * (1 - origWeight[i]) + channel[i] * origWeight[i];
+    }
+
+    // Closing + opening with cross kernel: erode→dilate→dilate→erode
+    let smoothed = erodeCross(blended, w, h, erodeIter);
+    smoothed = dilateCross(smoothed, w, h, dilateIter * 2);
+    smoothed = erodeCross(smoothed, w, h, erodeIter);
+
+    for (let i = 0; i < w * h; i++) {
+      destData[i * 4 + c] = Math.max(0, Math.min(255, Math.round(smoothed[i])));
+    }
+  }
+
+  // Copy alpha channel
+  for (let i = 0; i < w * h; i++) {
+    destData[i * 4 + 3] = src[i * 4 + 3];
+  }
+
+  return result;
+}
+
+/** PixelOE find_pixel — contrast-based per-patch pixel selection for luminance */
+function findPixelContrast(patch: Float32Array): number {
+  const mid = patch[Math.floor(patch.length / 2)];
+  const sorted = Float32Array.from(patch).sort();
+  const med = sorted[Math.floor(sorted.length / 2)];
+  let sum = 0;
+  for (let i = 0; i < patch.length; i++) sum += patch[i];
+  const mu = sum / patch.length;
+  const maxi = sorted[sorted.length - 1];
+  const mini = sorted[0];
+
+  // Skew-based selection
+  if (med < mu && (maxi - med) > (med - mini)) return mini;
+  if (med > mu && (maxi - med) < (med - mini)) return maxi;
+  return mid;
+}
+
+/** PixelOE contrast-based downscale — processes in LAB space, returns resized ImageData */
+function pixeloeContrastDownscale(imageData: ImageData, targetW: number, targetH: number): ImageData {
+  const w = imageData.width;
+  const h = imageData.height;
+  const src = imageData.data;
+
+  const patchW = Math.max(1, Math.round(w / targetW));
+  const patchH = Math.max(1, Math.round(h / targetH));
+  const patchSize = Math.max(patchW, patchH);
+
+  // Convert to LAB
+  const labL = new Float32Array(w * h);
+  const labA = new Float32Array(w * h);
+  const labB = new Float32Array(w * h);
+  const alpha = new Uint8Array(w * h);
+
+  for (let i = 0; i < w * h; i++) {
+    const idx = i * 4;
+    const lab = xyzToLab(rgbToXyz({ r: src[idx], g: src[idx + 1], b: src[idx + 2] }));
+    labL[i] = lab.l;
+    labA[i] = lab.a;
+    labB[i] = lab.b;
+    alpha[i] = src[idx + 3];
+  }
+
+  // Process L channel with contrast-based find_pixel
+  const processedL = applyChunk(labL, w, h, patchSize, patchSize,
+    (patches) => patches.map(p => findPixelContrast(p)));
+
+  // Process A and B channels with median
+  const processedA = applyChunk(labA, w, h, patchSize, patchSize,
+    (patches) => patches.map(p => patchMedian(p)));
+  const processedB = applyChunk(labB, w, h, patchSize, patchSize,
+    (patches) => patches.map(p => patchMedian(p)));
+
+  // Convert back to RGB and resize to target using nearest neighbor
+  const tempData = new ImageData(w, h);
+  for (let i = 0; i < w * h; i++) {
+    const lab: LAB = { l: processedL[i], a: processedA[i], b: processedB[i] };
+    // LAB to RGB via XYZ
+    const xyz = labToXyz(lab);
+    const rgb = xyzToRgb(xyz);
+    const idx = i * 4;
+    tempData.data[idx] = rgb.r;
+    tempData.data[idx + 1] = rgb.g;
+    tempData.data[idx + 2] = rgb.b;
+    tempData.data[idx + 3] = alpha[i];
+  }
+
+  return resampleNearest(tempData, targetW, targetH);
+}
+
+/** Inverse LAB → XYZ */
+function labToXyz(lab: LAB): { x: number; y: number; z: number } {
+  let y = (lab.l + 16) / 116;
+  let x = lab.a / 500 + y;
+  let z = y - lab.b / 200;
+
+  const y3 = y * y * y;
+  const x3 = x * x * x;
+  const z3 = z * z * z;
+
+  y = y3 > 0.008856 ? y3 : (y - 16 / 116) / 7.787;
+  x = x3 > 0.008856 ? x3 : (x - 16 / 116) / 7.787;
+  z = z3 > 0.008856 ? z3 : (z - 16 / 116) / 7.787;
+
+  return { x: x * 95.047, y: y * 100.000, z: z * 108.883 };
+}
+
+/** Inverse XYZ → RGB */
+function xyzToRgb(xyz: { x: number; y: number; z: number }): RGB {
+  const x = xyz.x / 100;
+  const y = xyz.y / 100;
+  const z = xyz.z / 100;
+
+  let r = x * 3.2406 + y * -1.5372 + z * -0.4986;
+  let g = x * -0.9689 + y * 1.8758 + z * 0.0415;
+  let b = x * 0.0557 + y * -0.2040 + z * 1.0570;
+
+  r = r > 0.0031308 ? 1.055 * Math.pow(r, 1 / 2.4) - 0.055 : 12.92 * r;
+  g = g > 0.0031308 ? 1.055 * Math.pow(g, 1 / 2.4) - 0.055 : 12.92 * g;
+  b = b > 0.0031308 ? 1.055 * Math.pow(b, 1 / 2.4) - 0.055 : 12.92 * b;
+
+  return {
+    r: Math.max(0, Math.min(255, Math.round(r * 255))),
+    g: Math.max(0, Math.min(255, Math.round(g * 255))),
+    b: Math.max(0, Math.min(255, Math.round(b * 255))),
+  };
+}
+
+/** K-Centroid downscale: per-tile k-means to find dominant color */
+function pixeloeKCentroidDownscale(imageData: ImageData, targetW: number, targetH: number, centroids: number): ImageData {
+  const w = imageData.width;
+  const h = imageData.height;
+  const src = imageData.data;
+  const dest = new ImageData(targetW, targetH);
+  const destData = dest.data;
+
+  const wFactor = w / targetW;
+  const hFactor = h / targetH;
+
+  for (let ty = 0; ty < targetH; ty++) {
+    for (let tx = 0; tx < targetW; tx++) {
+      // Extract tile pixels
+      const x0 = Math.floor(tx * wFactor);
+      const y0 = Math.floor(ty * hFactor);
+      const x1 = Math.min(w, Math.floor((tx + 1) * wFactor));
+      const y1 = Math.min(h, Math.floor((ty + 1) * hFactor));
+
+      const pixels: number[][] = [];
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const idx = (y * w + x) * 4;
+          if (src[idx + 3] > 128) {
+            pixels.push([src[idx], src[idx + 1], src[idx + 2]]);
+          }
+        }
+      }
+
+      if (pixels.length === 0) {
+        const dIdx = (ty * targetW + tx) * 4;
+        destData[dIdx + 3] = 0;
+        continue;
+      }
+
+      // Simple k-means within the tile
+      const k = Math.min(centroids, pixels.length);
+      // Init centroids by evenly spaced sampling
+      let cents: number[][] = [];
+      for (let i = 0; i < k; i++) {
+        cents.push([...pixels[Math.floor(i * pixels.length / k)]]);
+      }
+
+      for (let iter = 0; iter < 8; iter++) {
+        const sums = Array.from({ length: k }, () => [0, 0, 0]);
+        const counts = new Array(k).fill(0);
+        for (const px of pixels) {
+          let minD = Infinity, best = 0;
+          for (let c = 0; c < k; c++) {
+            const d = (px[0] - cents[c][0]) ** 2 + (px[1] - cents[c][1]) ** 2 + (px[2] - cents[c][2]) ** 2;
+            if (d < minD) { minD = d; best = c; }
+          }
+          sums[best][0] += px[0]; sums[best][1] += px[1]; sums[best][2] += px[2];
+          counts[best]++;
+        }
+        for (let c = 0; c < k; c++) {
+          if (counts[c] > 0) {
+            cents[c] = [sums[c][0] / counts[c], sums[c][1] / counts[c], sums[c][2] / counts[c]];
+          }
+        }
+      }
+
+      // Find most common cluster
+      const assignments = new Array(k).fill(0);
+      for (const px of pixels) {
+        let minD = Infinity, best = 0;
+        for (let c = 0; c < k; c++) {
+          const d = (px[0] - cents[c][0]) ** 2 + (px[1] - cents[c][1]) ** 2 + (px[2] - cents[c][2]) ** 2;
+          if (d < minD) { minD = d; best = c; }
+        }
+        assignments[best]++;
+      }
+      let bestCluster = 0, bestCount = 0;
+      for (let c = 0; c < k; c++) {
+        if (assignments[c] > bestCount) { bestCount = assignments[c]; bestCluster = c; }
+      }
+
+      const dIdx = (ty * targetW + tx) * 4;
+      destData[dIdx] = Math.round(cents[bestCluster][0]);
+      destData[dIdx + 1] = Math.round(cents[bestCluster][1]);
+      destData[dIdx + 2] = Math.round(cents[bestCluster][2]);
+      destData[dIdx + 3] = 255;
+    }
+  }
+
+  return dest;
+}
+
 // --- Main Handler ---
 
 self.onmessage = async (e: MessageEvent) => {
@@ -1121,7 +1723,7 @@ self.onmessage = async (e: MessageEvent) => {
         return;
     }
 
-    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT } = settings;
+    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT, pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm } = settings;
     const colorMatchAlgorithm: ColorMatchAlgorithm = rawAlgo || 'oklab';
     const preserveDetailThreshold: number = rawPDT || 0;
 
@@ -1146,13 +1748,27 @@ self.onmessage = async (e: MessageEvent) => {
                 processedImageData = applyBilateralFilter(processedImageData, strength);
             } else if (preprocessingMethod === 'kuwahara') {
                 processedImageData = applyKuwaharaFilter(processedImageData, strength);
+            } else if (preprocessingMethod === 'edge-detect') {
+                processedImageData = applyEdgeDetection(processedImageData, strength, edgeDetectBlur || 0, edgeDetectAlgorithm || 'sobel');
             }
         }
 
         // ... [Rest of logic: Resize -> Kmeans -> Dither remains exactly the same] ...
+        // 0.75. PixelOE Outline Expansion (pre-downscale step for PixelOE methods)
+        const isPixelOE = resamplingMethod === 'pixeloe-contrast' || resamplingMethod === 'pixeloe-k-centroid';
+        if (isPixelOE) {
+            const thickness = pixeloeThickness || 2;
+            const pSize = pixeloePatchSize || 16;
+            processedImageData = pixeloeOutlineExpansion(processedImageData, thickness, thickness, pSize);
+        }
+
         // 1. Resize
         let resizedImageData: ImageData;
-        if (resamplingMethod === 'lanczos') {
+        if (resamplingMethod === 'pixeloe-contrast') {
+            resizedImageData = pixeloeContrastDownscale(processedImageData, targetWidth, targetHeight);
+        } else if (resamplingMethod === 'pixeloe-k-centroid') {
+            resizedImageData = pixeloeKCentroidDownscale(processedImageData, targetWidth, targetHeight, 2);
+        } else if (resamplingMethod === 'lanczos') {
             resizedImageData = resampleLanczos(processedImageData, targetWidth, targetHeight);
         } else if (resamplingMethod === 'bilinear') {
             resizedImageData = resampleBilinear(processedImageData, targetWidth, targetHeight);
