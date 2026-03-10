@@ -1240,112 +1240,148 @@ function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
 }
 
-/** Morphological erosion with a 3x3 full kernel */
+/** Morphological erosion with a 3x3 full kernel (ping-pong buffers) */
 function erodeChannel(data: Float32Array, w: number, h: number, iterations: number): Float32Array {
-  let current = data;
+  if (iterations === 0) return data;
+  const bufA = new Float32Array(data);
+  const bufB = new Float32Array(w * h);
+  let src = bufA, dst = bufB;
   for (let iter = 0; iter < iterations; iter++) {
-    const out = new Float32Array(w * h);
     for (let y = 0; y < h; y++) {
+      const y0 = y > 0 ? y - 1 : 0;
+      const y2 = y < h - 1 ? y + 1 : h - 1;
       for (let x = 0; x < w; x++) {
-        let minVal = 255;
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const ny = Math.min(h - 1, Math.max(0, y + dy));
-            const nx = Math.min(w - 1, Math.max(0, x + dx));
-            const v = current[ny * w + nx];
-            if (v < minVal) minVal = v;
-          }
-        }
-        out[y * w + x] = minVal;
+        const x0 = x > 0 ? x - 1 : 0;
+        const x2 = x < w - 1 ? x + 1 : w - 1;
+        const r0 = y0 * w, r1 = y * w, r2 = y2 * w;
+        let v = src[r0 + x0]; const v2 = src[r0 + x]; if (v2 < v) v = v2;
+        const v3 = src[r0 + x2]; if (v3 < v) v = v3;
+        const v4 = src[r1 + x0]; if (v4 < v) v = v4;
+        const v5 = src[r1 + x]; if (v5 < v) v = v5;
+        const v6 = src[r1 + x2]; if (v6 < v) v = v6;
+        const v7 = src[r2 + x0]; if (v7 < v) v = v7;
+        const v8 = src[r2 + x]; if (v8 < v) v = v8;
+        const v9 = src[r2 + x2]; if (v9 < v) v = v9;
+        dst[r1 + x] = v;
       }
     }
-    current = out;
+    const tmp = src; src = dst; dst = tmp;
   }
-  return current;
+  return src;
 }
 
-/** Morphological dilation with a 3x3 full kernel */
+/** Morphological dilation with a 3x3 full kernel (ping-pong buffers) */
 function dilateChannel(data: Float32Array, w: number, h: number, iterations: number): Float32Array {
-  let current = data;
+  if (iterations === 0) return data;
+  const bufA = new Float32Array(data);
+  const bufB = new Float32Array(w * h);
+  let src = bufA, dst = bufB;
   for (let iter = 0; iter < iterations; iter++) {
-    const out = new Float32Array(w * h);
     for (let y = 0; y < h; y++) {
+      const y0 = y > 0 ? y - 1 : 0;
+      const y2 = y < h - 1 ? y + 1 : h - 1;
       for (let x = 0; x < w; x++) {
-        let maxVal = 0;
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const ny = Math.min(h - 1, Math.max(0, y + dy));
-            const nx = Math.min(w - 1, Math.max(0, x + dx));
-            const v = current[ny * w + nx];
-            if (v > maxVal) maxVal = v;
-          }
-        }
-        out[y * w + x] = maxVal;
+        const x0 = x > 0 ? x - 1 : 0;
+        const x2 = x < w - 1 ? x + 1 : w - 1;
+        const r0 = y0 * w, r1 = y * w, r2 = y2 * w;
+        let v = src[r0 + x0]; const v2 = src[r0 + x]; if (v2 > v) v = v2;
+        const v3 = src[r0 + x2]; if (v3 > v) v = v3;
+        const v4 = src[r1 + x0]; if (v4 > v) v = v4;
+        const v5 = src[r1 + x]; if (v5 > v) v = v5;
+        const v6 = src[r1 + x2]; if (v6 > v) v = v6;
+        const v7 = src[r2 + x0]; if (v7 > v) v = v7;
+        const v8 = src[r2 + x]; if (v8 > v) v = v8;
+        const v9 = src[r2 + x2]; if (v9 > v) v = v9;
+        dst[r1 + x] = v;
       }
     }
-    current = out;
+    const tmp = src; src = dst; dst = tmp;
   }
-  return current;
+  return src;
 }
 
-/** Morphological erosion with a 3x3 cross kernel (diamond shape) */
+/** Morphological erosion with a 3x3 cross kernel (ping-pong buffers) */
 function erodeCross(data: Float32Array, w: number, h: number, iterations: number): Float32Array {
-  const offsets = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
-  let current = data;
+  if (iterations === 0) return data;
+  const bufA = new Float32Array(data);
+  const bufB = new Float32Array(w * h);
+  let src = bufA, dst = bufB;
   for (let iter = 0; iter < iterations; iter++) {
-    const out = new Float32Array(w * h);
     for (let y = 0; y < h; y++) {
+      const y0 = y > 0 ? y - 1 : 0;
+      const y2 = y < h - 1 ? y + 1 : h - 1;
       for (let x = 0; x < w; x++) {
-        let minVal = 255;
-        for (const [dx, dy] of offsets) {
-          const ny = Math.min(h - 1, Math.max(0, y + dy));
-          const nx = Math.min(w - 1, Math.max(0, x + dx));
-          const v = current[ny * w + nx];
-          if (v < minVal) minVal = v;
-        }
-        out[y * w + x] = minVal;
+        const x0 = x > 0 ? x - 1 : 0;
+        const x2 = x < w - 1 ? x + 1 : w - 1;
+        const r1 = y * w;
+        let v = src[r1 + x];
+        const vt = src[y0 * w + x]; if (vt < v) v = vt;
+        const vb = src[y2 * w + x]; if (vb < v) v = vb;
+        const vl = src[r1 + x0]; if (vl < v) v = vl;
+        const vr = src[r1 + x2]; if (vr < v) v = vr;
+        dst[r1 + x] = v;
       }
     }
-    current = out;
+    const tmp = src; src = dst; dst = tmp;
   }
-  return current;
+  return src;
 }
 
-/** Morphological dilation with a 3x3 cross kernel */
+/** Morphological dilation with a 3x3 cross kernel (ping-pong buffers) */
 function dilateCross(data: Float32Array, w: number, h: number, iterations: number): Float32Array {
-  const offsets = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
-  let current = data;
+  if (iterations === 0) return data;
+  const bufA = new Float32Array(data);
+  const bufB = new Float32Array(w * h);
+  let src = bufA, dst = bufB;
   for (let iter = 0; iter < iterations; iter++) {
-    const out = new Float32Array(w * h);
     for (let y = 0; y < h; y++) {
+      const y0 = y > 0 ? y - 1 : 0;
+      const y2 = y < h - 1 ? y + 1 : h - 1;
       for (let x = 0; x < w; x++) {
-        let maxVal = 0;
-        for (const [dx, dy] of offsets) {
-          const ny = Math.min(h - 1, Math.max(0, y + dy));
-          const nx = Math.min(w - 1, Math.max(0, x + dx));
-          const v = current[ny * w + nx];
-          if (v > maxVal) maxVal = v;
-        }
-        out[y * w + x] = maxVal;
+        const x0 = x > 0 ? x - 1 : 0;
+        const x2 = x < w - 1 ? x + 1 : w - 1;
+        const r1 = y * w;
+        let v = src[r1 + x];
+        const vt = src[y0 * w + x]; if (vt > v) v = vt;
+        const vb = src[y2 * w + x]; if (vb > v) v = vb;
+        const vl = src[r1 + x0]; if (vl > v) v = vl;
+        const vr = src[r1 + x2]; if (vr > v) v = vr;
+        dst[r1 + x] = v;
       }
     }
-    current = out;
+    const tmp = src; src = dst; dst = tmp;
   }
-  return current;
+  return src;
 }
 
-/** Apply a sliding-window reducer function over a 2D channel.
- *  Equivalent to PixelOE's apply_chunk — unfolds patches, applies func, folds back. */
-function applyChunk(
+/** Quickselect — O(n) median finding, avoids full sort */
+function quickselect(arr: Float32Array, k: number, lo: number, hi: number): number {
+  while (lo < hi) {
+    const pivot = arr[(lo + hi) >> 1];
+    let i = lo, j = hi;
+    while (i <= j) {
+      while (arr[i] < pivot) i++;
+      while (arr[j] > pivot) j--;
+      if (i <= j) { const t = arr[i]; arr[i] = arr[j]; arr[j] = t; i++; j--; }
+    }
+    if (k <= j) hi = j;
+    else if (k >= i) lo = i;
+    else return arr[k];
+  }
+  return arr[lo];
+}
+
+/** Apply a sliding-window reducer over a 2D channel — optimized with flat buffer.
+ *  Supported modes avoid per-patch allocation overhead. */
+function applyChunkOp(
   data: Float32Array, w: number, h: number,
   kernel: number, stride: number,
-  func: (patches: Float32Array[]) => number[]
+  mode: 'median' | 'max' | 'min' | 'contrast-pixel'
 ): Float32Array {
   const kShift = Math.max(kernel - stride, 0);
   const padBefore = Math.floor(kShift / 2);
   const padAfter = padBefore + (kShift % 2);
 
-  // Pad with edge replication
   const pw = w + padBefore + padAfter;
   const ph = h + padBefore + padAfter;
   const padded = new Float32Array(pw * ph);
@@ -1357,66 +1393,65 @@ function applyChunk(
     }
   }
 
-  // Extract patches and apply function
   const outH = Math.floor((ph - kernel) / stride) + 1;
   const outW = Math.floor((pw - kernel) / stride) + 1;
   const patchSize = kernel * kernel;
-  const patches: Float32Array[] = [];
+  const output = new Float32Array(w * h);
+
+  // Reusable patch buffer — one allocation for all patches
+  const patch = new Float32Array(patchSize);
 
   for (let py = 0; py < outH; py++) {
     for (let px = 0; px < outW; px++) {
-      const patch = new Float32Array(patchSize);
+      // Extract patch into reusable buffer
       let idx = 0;
       for (let ky = 0; ky < kernel; ky++) {
+        const rowOff = (py * stride + ky) * pw + px * stride;
         for (let kx = 0; kx < kernel; kx++) {
-          patch[idx++] = padded[(py * stride + ky) * pw + (px * stride + kx)];
+          patch[idx++] = padded[rowOff + kx];
         }
       }
-      patches.push(patch);
-    }
-  }
 
-  const results = func(patches);
+      let result: number;
+      if (mode === 'max') {
+        result = patch[0];
+        for (let i = 1; i < patchSize; i++) if (patch[i] > result) result = patch[i];
+      } else if (mode === 'min') {
+        result = patch[0];
+        for (let i = 1; i < patchSize; i++) if (patch[i] < result) result = patch[i];
+      } else if (mode === 'contrast-pixel') {
+        // findPixelContrast inline
+        const mid = patch[patchSize >> 1];
+        const med = quickselect(patch, patchSize >> 1, 0, patchSize - 1);
+        let sum = 0;
+        let maxi = patch[0], mini = patch[0];
+        for (let i = 0; i < patchSize; i++) {
+          sum += patch[i];
+          if (patch[i] > maxi) maxi = patch[i];
+          if (patch[i] < mini) mini = patch[i];
+        }
+        const mu = sum / patchSize;
+        if (med < mu && (maxi - med) > (med - mini)) result = mini;
+        else if (med > mu && (maxi - med) < (med - mini)) result = maxi;
+        else result = mid;
+      } else {
+        // median via quickselect
+        result = quickselect(patch, patchSize >> 1, 0, patchSize - 1);
+      }
 
-  // Fold results back into output
-  const output = new Float32Array(w * h);
-  let patchIdx = 0;
-  for (let py = 0; py < outH; py++) {
-    for (let px = 0; px < outW; px++) {
-      // Each result maps to a stride x stride region
-      for (let sy = 0; sy < stride && py * stride + sy < h; sy++) {
-        for (let sx = 0; sx < stride && px * stride + sx < w; sx++) {
-          const oy = py * stride + sy;
+      // Fill the stride x stride output region
+      for (let sy = 0; sy < stride; sy++) {
+        const oy = py * stride + sy;
+        if (oy >= h) break;
+        for (let sx = 0; sx < stride; sx++) {
           const ox = px * stride + sx;
-          if (oy < h && ox < w) {
-            output[oy * w + ox] = results[patchIdx];
-          }
+          if (ox >= w) break;
+          output[oy * w + ox] = result;
         }
       }
-      patchIdx++;
     }
   }
   return output;
-}
-
-function patchMedian(patch: Float32Array): number {
-  const sorted = Float32Array.from(patch).sort();
-  return sorted[Math.floor(sorted.length / 2)];
-}
-function patchMax(patch: Float32Array): number {
-  let m = -Infinity;
-  for (let i = 0; i < patch.length; i++) if (patch[i] > m) m = patch[i];
-  return m;
-}
-function patchMin(patch: Float32Array): number {
-  let m = Infinity;
-  for (let i = 0; i < patch.length; i++) if (patch[i] < m) m = patch[i];
-  return m;
-}
-function patchMean(patch: Float32Array): number {
-  let s = 0;
-  for (let i = 0; i < patch.length; i++) s += patch[i];
-  return s / patch.length;
 }
 
 /** Compute the expansion weight map (PixelOE expansion_weight) */
@@ -1426,12 +1461,9 @@ function computeExpansionWeight(
 ): Float32Array {
   const stride = Math.max(2, Math.floor(k / 4) * 2);
 
-  const avgY = applyChunk(grayChannel, w, h, k * 2, stride,
-    (patches) => patches.map(p => patchMedian(p)));
-  const maxY = applyChunk(grayChannel, w, h, k, stride,
-    (patches) => patches.map(p => patchMax(p)));
-  const minY = applyChunk(grayChannel, w, h, k, stride,
-    (patches) => patches.map(p => patchMin(p)));
+  const avgY = applyChunkOp(grayChannel, w, h, k * 2, stride, 'median');
+  const maxY = applyChunkOp(grayChannel, w, h, k, stride, 'max');
+  const minY = applyChunkOp(grayChannel, w, h, k, stride, 'min');
 
   const weight = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) {
@@ -1455,7 +1487,7 @@ function computeExpansionWeight(
   return weight;
 }
 
-/** PixelOE outline expansion — operates on full RGB ImageData, returns expanded ImageData */
+/** PixelOE outline expansion — operates on full RGB ImageData, returns expanded ImageData. */
 function pixeloeOutlineExpansion(imageData: ImageData, erodeIter: number, dilateIter: number, k: number): ImageData {
   const w = imageData.width;
   const h = imageData.height;
@@ -1465,7 +1497,6 @@ function pixeloeOutlineExpansion(imageData: ImageData, erodeIter: number, dilate
   const gray = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) {
     const idx = i * 4;
-    // Use L from approximate LAB (perceptual luminance)
     gray[i] = (0.299 * src[idx] + 0.587 * src[idx + 1] + 0.114 * src[idx + 2]) / 255;
   }
 
@@ -1511,23 +1542,6 @@ function pixeloeOutlineExpansion(imageData: ImageData, erodeIter: number, dilate
   return result;
 }
 
-/** PixelOE find_pixel — contrast-based per-patch pixel selection for luminance */
-function findPixelContrast(patch: Float32Array): number {
-  const mid = patch[Math.floor(patch.length / 2)];
-  const sorted = Float32Array.from(patch).sort();
-  const med = sorted[Math.floor(sorted.length / 2)];
-  let sum = 0;
-  for (let i = 0; i < patch.length; i++) sum += patch[i];
-  const mu = sum / patch.length;
-  const maxi = sorted[sorted.length - 1];
-  const mini = sorted[0];
-
-  // Skew-based selection
-  if (med < mu && (maxi - med) > (med - mini)) return mini;
-  if (med > mu && (maxi - med) < (med - mini)) return maxi;
-  return mid;
-}
-
 /** PixelOE contrast-based downscale — processes in LAB space, returns resized ImageData */
 function pixeloeContrastDownscale(imageData: ImageData, targetW: number, targetH: number): ImageData {
   const w = imageData.width;
@@ -1554,14 +1568,11 @@ function pixeloeContrastDownscale(imageData: ImageData, targetW: number, targetH
   }
 
   // Process L channel with contrast-based find_pixel
-  const processedL = applyChunk(labL, w, h, patchSize, patchSize,
-    (patches) => patches.map(p => findPixelContrast(p)));
+  const processedL = applyChunkOp(labL, w, h, patchSize, patchSize, 'contrast-pixel');
 
   // Process A and B channels with median
-  const processedA = applyChunk(labA, w, h, patchSize, patchSize,
-    (patches) => patches.map(p => patchMedian(p)));
-  const processedB = applyChunk(labB, w, h, patchSize, patchSize,
-    (patches) => patches.map(p => patchMedian(p)));
+  const processedA = applyChunkOp(labA, w, h, patchSize, patchSize, 'median');
+  const processedB = applyChunkOp(labB, w, h, patchSize, patchSize, 'median');
 
   // Convert back to RGB and resize to target using nearest neighbor
   const tempData = new ImageData(w, h);
@@ -1755,7 +1766,7 @@ self.onmessage = async (e: MessageEvent) => {
 
         // ... [Rest of logic: Resize -> Kmeans -> Dither remains exactly the same] ...
         // 0.75. PixelOE Outline Expansion (pre-downscale step for PixelOE methods)
-        const isPixelOE = resamplingMethod === 'pixeloe-contrast' || resamplingMethod === 'pixeloe-k-centroid';
+        const isPixelOE = resamplingMethod === 'pixeloe-nearest' || resamplingMethod === 'pixeloe-contrast' || resamplingMethod === 'pixeloe-k-centroid';
         if (isPixelOE) {
             const thickness = pixeloeThickness || 2;
             const pSize = pixeloePatchSize || 16;
@@ -1768,6 +1779,8 @@ self.onmessage = async (e: MessageEvent) => {
             resizedImageData = pixeloeContrastDownscale(processedImageData, targetWidth, targetHeight);
         } else if (resamplingMethod === 'pixeloe-k-centroid') {
             resizedImageData = pixeloeKCentroidDownscale(processedImageData, targetWidth, targetHeight, 2);
+        } else if (resamplingMethod === 'pixeloe-nearest') {
+            resizedImageData = resampleNearest(processedImageData, targetWidth, targetHeight);
         } else if (resamplingMethod === 'lanczos') {
             resizedImageData = resampleLanczos(processedImageData, targetWidth, targetHeight);
         } else if (resamplingMethod === 'bilinear') {

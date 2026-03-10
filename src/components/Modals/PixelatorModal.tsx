@@ -64,7 +64,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   // State
   const [targetHeight, setTargetHeight] = useState<number>(128);
   const [originalHeight, setOriginalHeight] = useState<number>(128);
-  const [resamplingMethod, setResamplingMethod] = useState<'nearest' | 'bilinear' | 'lanczos' | 'pixeloe-contrast' | 'pixeloe-k-centroid'>('bilinear');
+  const [resamplingMethod, setResamplingMethod] = useState<'nearest' | 'bilinear' | 'lanczos' | 'pixeloe-nearest' | 'pixeloe-contrast' | 'pixeloe-k-centroid'>('bilinear');
   const [ditherMethod, setDitherMethod] = useState<string>('none');
   const [ditherStrength, setDitherStrength] = useState<number>(100);
   const [preprocessingMethod, setPreprocessingMethod] = useState<'none' | 'bilateral' | 'kuwahara' | 'median' | 'edge-detect'>('none');
@@ -735,17 +735,20 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                   <option value="nearest">Nearest Neighbor (Sharp)</option>
                   <option value="bilinear">Bilinear (Smooth)</option>
                   <option value="lanczos">Lanczos (High Quality)</option>
+                  <option value="pixeloe-nearest">⚠️ PixelOE Nearest (Experimental)</option>
                   <option value="pixeloe-contrast">⚠️ PixelOE Contrast (Experimental)</option>
                   <option value="pixeloe-k-centroid">⚠️ PixelOE K-Centroid (Experimental)</option>
                 </select>
-                {(resamplingMethod === 'pixeloe-contrast' || resamplingMethod === 'pixeloe-k-centroid') && (
+                {(resamplingMethod === 'pixeloe-nearest' || resamplingMethod === 'pixeloe-contrast' || resamplingMethod === 'pixeloe-k-centroid') && (
                   <div className="mt-2 space-y-2 bg-yellow-900/20 border border-yellow-700/50 rounded p-2">
                     <div className="flex items-center gap-1 text-xs text-yellow-400 font-semibold">
                       <span>⚠️</span>
                       <span>PixelOE — Outline-Aware Pixelization</span>
                     </div>
                     <p className="text-xs text-yellow-300/70">
-                      {resamplingMethod === 'pixeloe-contrast'
+                      {resamplingMethod === 'pixeloe-nearest'
+                        ? 'Outline expansion then nearest-neighbor downscale. Clean and fast — recommended starting point.'
+                        : resamplingMethod === 'pixeloe-contrast'
                         ? 'Contrast-aware downscaling in LAB space. Preserves dark/bright details by adaptively selecting pixels per patch.'
                         : 'K-means clustering per tile to find the dominant color. Produces clean, flat pixel art.'}
                     </p>
