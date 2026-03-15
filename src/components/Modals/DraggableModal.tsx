@@ -44,15 +44,36 @@ const DraggableModal: React.FC<DraggableModalProps> = ({
     if (isOpen) {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-      const w = Math.min(1100, Math.round(vw * 0.9));
-      const h = Math.min(900, Math.round(vh * 0.9));
+
+      // Try to restore saved size for this modal
+      let w: number, h: number;
+      if (modalId) {
+        try {
+          const saved = localStorage.getItem(`modal_size_${modalId}`);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            w = Math.min(Math.max(300, parsed.width), vw);
+            h = Math.min(Math.max(200, parsed.height), vh);
+          } else {
+            w = Math.min(1100, Math.round(vw * 0.9));
+            h = Math.min(900, Math.round(vh * 0.9));
+          }
+        } catch {
+          w = Math.min(1100, Math.round(vw * 0.9));
+          h = Math.min(900, Math.round(vh * 0.9));
+        }
+      } else {
+        w = Math.min(1100, Math.round(vw * 0.9));
+        h = Math.min(900, Math.round(vh * 0.9));
+      }
+
       setSize({ width: w, height: h });
       setPosition({
         x: Math.max(0, Math.round((vw - w) / 2)),
         y: Math.max(0, Math.round((vh - h) / 2)),
       });
     }
-  }, [isOpen]);
+  }, [isOpen, modalId]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -148,6 +169,13 @@ const DraggableModal: React.FC<DraggableModalProps> = ({
     const handleResizeMouseUp = () => {
       setIsResizing(false);
       resizeStartRef.current = null;
+      // Persist modal size
+      if (modalId) {
+        setSize(currentSize => {
+          localStorage.setItem(`modal_size_${modalId}`, JSON.stringify(currentSize));
+          return currentSize;
+        });
+      }
     };
 
     if (isResizing) {

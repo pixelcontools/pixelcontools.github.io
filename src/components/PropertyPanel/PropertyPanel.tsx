@@ -22,6 +22,7 @@ function PropertyPanel() {
 
   const [isTransparencyModalOpen, setIsTransparencyModalOpen] = useState(false);
   const [isPixelatorModalOpen, setIsPixelatorModalOpen] = useState(false);
+  const [pixelatorLayerId, setPixelatorLayerId] = useState<string | null>(null);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [isBgRemovalModalOpen, setIsBgRemovalModalOpen] = useState(false);
 
@@ -97,7 +98,7 @@ function PropertyPanel() {
                   </button>
                   <button
                     id="btn-open-pixelator-modal"
-                    onClick={() => setIsPixelatorModalOpen(true)}
+                    onClick={() => { setPixelatorLayerId(selectedLayers[0].id); setIsPixelatorModalOpen(true); }}
                     className="flex items-center gap-2 w-full text-left px-2 py-1.5 text-xs text-gray-300 hover:bg-slate-700/50 hover:text-white rounded transition-colors"
                     aria-label="Open pixelator / resize"
                   >
@@ -137,14 +138,6 @@ function PropertyPanel() {
             )}
 
             {selectedLayerIds.length === 1 && selectedLayers.length > 0 && (
-              <PixelatorModal 
-                isOpen={isPixelatorModalOpen}
-                onClose={() => setIsPixelatorModalOpen(false)}
-                layer={selectedLayers[0]}
-              />
-            )}
-
-            {selectedLayerIds.length === 1 && selectedLayers.length > 0 && (
               <BgRemovalModal
                 isOpen={isBgRemovalModalOpen}
                 onClose={() => setIsBgRemovalModalOpen(false)}
@@ -167,6 +160,18 @@ function PropertyPanel() {
       </div>
 
       {/* Canvas Settings moved to Layer panel */}
+
+      {/* PixelatorModal — rendered outside selection guard so it survives layer deselection */}
+      {(() => {
+        const pixelatorLayer = pixelatorLayerId ? project.layers.find(l => l.id === pixelatorLayerId) : null;
+        return pixelatorLayer ? (
+          <PixelatorModal
+            isOpen={isPixelatorModalOpen}
+            onClose={() => setIsPixelatorModalOpen(false)}
+            layer={pixelatorLayer}
+          />
+        ) : null;
+      })()}
     </div>
   );
 }

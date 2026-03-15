@@ -19,11 +19,11 @@ const GEOPIXELS_PALETTE = [
 ];
 
 const WPLACE_PALETTE = [
-  "#000000", "#3c3c3c", "#787878", "#aaaaaa", "#d2d2d2", "#ffffff", "#600018", "#a50e1e", "#ed1c24", "#fa8072", "#e45c1a", "#ff7f27", "#f6aa09", "#f9dd3b", "#fffabc", "#9c8431", "#c5ad31", "#e8d45f", "#4a6b3a", "#5a944a", "#84c573", "#0eb968", "#13e67b", "#87ff5e", "#0c816e", "#10aea6", "#13e1be", "#0f799f", "#60f7f2", "#bbfaf2", "#28509e", "#4093e4", "#7dc7ff", "#4d31b8", "#6b50f6", "#99b1fb", "#4a4284", "#7a71c4", "#b5aef1", "#780c99", "#aa38b9", "#e09ff9", "#cb007a", "#ec1f80", "#f38da9", "#9b5249", "#d18078", "#fab6a4", "#684634", "#95682a", "#dba463", "#7b6352", "#9c846b", "#d6b594", "#d18051", "#f8b277", "#ffc5a5", "#6d643f", "#948c6b", "#cdc59e", "#333941", "#6d758d", "#b3b9d1"
+  "#000000", "#3C3C3C", "#787878", "#AAAAAA", "#D2D2D2", "#FFFFFF", "#600018", "#A50E1E", "#ED1C24", "#FA8072", "#E45C1A", "#FF7F27", "#F6AA09", "#F9DD3B", "#FFFABC", "#9C8431", "#C5AD31", "#E8D45F", "#4A6B3A", "#5A944A", "#84C573", "#0EB968", "#13E67B", "#87FF5E", "#0C816E", "#10AEA6", "#13E1BE", "#0F799F", "#60F7F2", "#BBFAF2", "#28509E", "#4093E4", "#7DC7FF", "#4D31B8", "#6B50F6", "#99B1FB", "#4A4284", "#7A71C4", "#B5AEF1", "#780C99", "#AA38B9", "#E09FF9", "#CB007A", "#EC1F80", "#F38DA9", "#9B5249", "#D18078", "#FAB6A4", "#684634", "#95682A", "#DBA463", "#7B6352", "#9C846B", "#D6B594", "#D18051", "#F8B277", "#FFC5A5", "#6D643F", "#948C6B", "#CDC59E", "#333941", "#6D758D", "#B3B9D1"
 ];
 
 const WPLACE_FREE_PALETTE = [
-  "#000000", "#3c3c3c", "#787878", "#d2d2d2", "#ffffff", "#600018", "#ed1c24", "#ff7f27", "#f6aa09", "#f9dd3b", "#fffabc", "#0eb968", "#13e67b", "#87ff5e", "#0c816e", "#10aea6", "#13e1be", "#60f7f2", "#28509e", "#4093e4", "#6b50f6", "#99b1fb", "#780c99", "#aa38b9", "#e09ff9", "#cb007a", "#ec1f80", "#f38da9", "#684634", "#95682a", "#f8b277"
+  "#000000", "#3C3C3C", "#787878", "#D2D2D2", "#FFFFFF", "#600018", "#ED1C24", "#FF7F27", "#F6AA09", "#F9DD3B", "#FFFABC", "#0EB968", "#13E67B", "#87FF5E", "#0C816E", "#10AEA6", "#13E1BE", "#60F7F2", "#28509E", "#4093E4", "#6B50F6", "#99B1FB", "#780C99", "#AA38B9", "#E09FF9", "#CB007A", "#EC1F80", "#F38DA9", "#684634", "#95682A", "#F8B277"
 ];
 
 const COLOR_MATCH_ALGORITHMS = [
@@ -116,6 +116,14 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const [edgeDetectBlur, setEdgeDetectBlur] = useState<number>(0);
   const [edgeDetectAlgorithm, setEdgeDetectAlgorithm] = useState<'sobel' | 'scharr' | 'laplacian'>('sobel');
 
+  // Context menu state for palette swatches
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; color: string; editing?: boolean; editValue?: string } | null>(null);
+
+  // Highlight color on the preview canvas
+  const [highlightColor, setHighlightColor] = useState<string | null>(null);
+  const highlightCanvasRef = useRef<HTMLCanvasElement>(null);
+  const previewImageDataRef = useRef<ImageData | null>(null);
+
   // Eyedropper modal state
   const [isEyedropperOpen, setIsEyedropperOpen] = useState<boolean>(false);
 
@@ -132,6 +140,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const compareContainerRef = useRef<HTMLDivElement>(null);
   const isDraggingCompare = useRef<boolean>(false);
   const jobIdRef = useRef<number>(0);
+  const [settingsLoaded, setSettingsLoaded] = useState<boolean>(false);
 
   // Track previous state to restore K-Means when switching back to 'none'
   const wasKmeansEnabledRef = useRef<boolean>(false);
@@ -139,6 +148,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const debounceTimeRef = useRef<number>(750);
 
   const analyzePreviewColors = (imageData: ImageData) => {
+    previewImageDataRef.current = imageData;
     const data = imageData.data;
     const stats = new Map<string, number>();
     let totalPixels = 0;
@@ -229,13 +239,69 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     }
   }, []);
 
+  // Load persisted settings on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('pixelator_settings');
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s.targetHeight != null) setTargetHeight(s.targetHeight);
+        if (s.resamplingMethod) setResamplingMethod(s.resamplingMethod);
+        if (s.ditherMethod) setDitherMethod(s.ditherMethod);
+        if (s.ditherStrength != null) setDitherStrength(s.ditherStrength);
+        if (s.preprocessingMethod) setPreprocessingMethod(s.preprocessingMethod);
+        if (s.preprocessingStrength != null) setPreprocessingStrength(s.preprocessingStrength);
+        if (s.paletteMode) setPaletteMode(s.paletteMode);
+        if (s.useKmeans != null) setUseKmeans(s.useKmeans);
+        if (s.kmeansColors != null) setKmeansColors(s.kmeansColors);
+        if (s.brightness != null) setBrightness(s.brightness);
+        if (s.contrast != null) setContrast(s.contrast);
+        if (s.saturation != null) setSaturation(s.saturation);
+        if (s.colorMatchAlgorithm) setColorMatchAlgorithm(s.colorMatchAlgorithm);
+        if (s.preserveDetailThreshold != null) setPreserveDetailThreshold(s.preserveDetailThreshold);
+        if (s.filterTrivialColors != null) setFilterTrivialColors(s.filterTrivialColors);
+        if (s.trivialThreshold != null) { setTrivialThreshold(s.trivialThreshold); setDisplayTrivialThreshold(String(s.trivialThreshold)); }
+        if (s.trivialThresholdMode) setTrivialThresholdMode(s.trivialThresholdMode);
+        if (s.pixeloeThickness != null) setPixeloeThickness(s.pixeloeThickness);
+        if (s.pixeloePatchSize != null) setPixeloePatchSize(s.pixeloePatchSize);
+        if (s.edgeDetectBlur != null) setEdgeDetectBlur(s.edgeDetectBlur);
+        if (s.edgeDetectAlgorithm) setEdgeDetectAlgorithm(s.edgeDetectAlgorithm);
+        if (s.autoUpdate != null) setAutoUpdate(s.autoUpdate);
+        if (s.isPaletteVisualizationOpen != null) setIsPaletteVisualizationOpen(s.isPaletteVisualizationOpen);
+        if (s.isExtraFeaturesOpen != null) setIsExtraFeaturesOpen(s.isExtraFeaturesOpen);
+      }
+    } catch { /* ignore corrupt data */ }
+    setSettingsLoaded(true);
+  }, []);
+
+  // Save settings to localStorage whenever they change
+  const settingsToSave = useMemo(() => ({
+    targetHeight, resamplingMethod, ditherMethod, ditherStrength,
+    preprocessingMethod, preprocessingStrength, paletteMode,
+    useKmeans, kmeansColors, brightness, contrast, saturation,
+    colorMatchAlgorithm, preserveDetailThreshold,
+    filterTrivialColors, trivialThreshold, trivialThresholdMode,
+    pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm,
+    autoUpdate, isPaletteVisualizationOpen, isExtraFeaturesOpen,
+  }), [targetHeight, resamplingMethod, ditherMethod, ditherStrength,
+    preprocessingMethod, preprocessingStrength, paletteMode,
+    useKmeans, kmeansColors, brightness, contrast, saturation,
+    colorMatchAlgorithm, preserveDetailThreshold,
+    filterTrivialColors, trivialThreshold, trivialThresholdMode,
+    pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm,
+    autoUpdate, isPaletteVisualizationOpen, isExtraFeaturesOpen]);
+
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    localStorage.setItem('pixelator_settings', JSON.stringify(settingsToSave));
+  }, [settingsToSave, settingsLoaded]);
+
   // Initialize original height from layer dimensions
   useEffect(() => {
     if (isOpen && layer.imageData) {
       const img = new Image();
       img.onload = () => {
         setOriginalHeight(img.height);
-        setTargetHeight(128);
       };
       img.src = layer.imageData;
     }
@@ -507,10 +573,25 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     });
   };
 
+  // Compute effective palette (after trivial filtering) for suggest colors
+  const getEffectivePalette = useCallback(() => {
+    const palette = getPalette();
+    if (!filterTrivialColors || colorStats.size === 0) return palette;
+
+    const totalPixels = Array.from(colorStats.values()).reduce((s, v) => s + v.count, 0);
+    return palette.filter(color => {
+      const stats = colorStats.get(color);
+      if (!stats) return true;
+      if (trivialThresholdMode === 'pixels') return stats.count >= trivialThreshold;
+      const percent = totalPixels > 0 ? (stats.count / totalPixels) * 100 : 0;
+      return percent >= trivialThreshold;
+    });
+  }, [getPalette, filterTrivialColors, colorStats, trivialThreshold, trivialThresholdMode]);
+
   const handleSuggestColors = useCallback(() => {
     if (!workerRef.current || !layer.imageData) return;
 
-    const palette = getPalette();
+    const palette = getEffectivePalette();
     if (palette.length === 0) {
       alert('Please select a palette first to find missing colors.');
       return;
@@ -533,14 +614,14 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
         type: 'suggest',
         imageData,
         settings: {
-          palette: getPalette(),
+          palette,
           numSuggestions: suggestCount,
           preferDistinct: preferDistinctColors
         }
       });
     };
     img.src = layer.imageData;
-  }, [layer.imageData, getPalette, suggestCount, preferDistinctColors]);
+  }, [layer.imageData, getEffectivePalette, suggestCount, preferDistinctColors]);
 
   const handleAddSuggestedToCustom = () => {
     const existingText = customPaletteInput.trim();
@@ -552,6 +633,141 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
       setCustomPaletteInput(`${existingText}, ${newColors}`);
     }
   };
+
+  // Remove a color from the palette (switches to custom mode for built-in palettes)
+  const handleRemoveColor = useCallback((colorToRemove: string) => {
+    const currentPalette = getPalette();
+    const surviving = currentPalette.filter(c => c.toUpperCase() !== colorToRemove.toUpperCase());
+    if (surviving.length === 0) { setContextMenu(null); return; }
+    setCustomPaletteInput(surviving.join(', '));
+    if (paletteMode !== 'custom') setPaletteMode('custom');
+    setContextMenu(null);
+  }, [getPalette, paletteMode]);
+
+  // Replace a color in the palette with a new hex value
+  const handleReplaceColor = useCallback((oldColor: string, newHex: string) => {
+    const cleaned = newHex.trim().replace(/^#/, '');
+    if (!/^[0-9A-Fa-f]{6}$/.test(cleaned)) return;
+    const newColor = '#' + cleaned.toUpperCase();
+    const currentPalette = getPalette();
+    const updated = currentPalette.map(c => c.toUpperCase() === oldColor.toUpperCase() ? newColor : c);
+    setCustomPaletteInput(updated.join(', '));
+    if (paletteMode !== 'custom') setPaletteMode('custom');
+    setContextMenu(null);
+  }, [getPalette, paletteMode]);
+
+  // Prune unused colors — remove colors with 0 pixels in the preview
+  const handlePruneColors = useCallback(() => {
+    if (colorStats.size === 0) return;
+    const currentPalette = getPalette();
+
+    const survivingColors = currentPalette.filter(color => {
+      const stats = colorStats.get(color);
+      return stats != null && stats.count > 0;
+    });
+
+    if (survivingColors.length === 0) return;
+
+    setCustomPaletteInput(survivingColors.join(', '));
+    if (paletteMode !== 'custom') setPaletteMode('custom');
+  }, [colorStats, getPalette, paletteMode]);
+
+  // Click handler for palette swatches — shows action menu
+  const handleSwatchContextMenu = useCallback((e: React.MouseEvent, color: string) => {
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, color });
+  }, []);
+
+  // Dismiss context menu on click outside
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = () => setContextMenu(null);
+    window.addEventListener('click', handler);
+    window.addEventListener('contextmenu', handler);
+    return () => {
+      window.removeEventListener('click', handler);
+      window.removeEventListener('contextmenu', handler);
+    };
+  }, [contextMenu]);
+
+  // Pixel highlight overlay — draw when highlightColor changes
+  useEffect(() => {
+    const canvas = highlightCanvasRef.current;
+    const imgData = previewImageDataRef.current;
+    if (!canvas || !imgData) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = imgData.width;
+    canvas.height = imgData.height;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!highlightColor) return;
+
+    // Parse hex color to RGB
+    const hr = parseInt(highlightColor.slice(1, 3), 16);
+    const hg = parseInt(highlightColor.slice(3, 5), 16);
+    const hb = parseInt(highlightColor.slice(5, 7), 16);
+
+    const overlay = ctx.createImageData(imgData.width, imgData.height);
+    const src = imgData.data;
+    const dst = overlay.data;
+
+    for (let i = 0; i < src.length; i += 4) {
+      if (src[i + 3] === 0) continue;
+      if (src[i] === hr && src[i + 1] === hg && src[i + 2] === hb) {
+        // Matching pixel — bright cyan highlight
+        dst[i] = 0; dst[i + 1] = 255; dst[i + 2] = 255; dst[i + 3] = 160;
+      } else {
+        // Non-matching — dim overlay
+        dst[i] = 0; dst[i + 1] = 0; dst[i + 2] = 0; dst[i + 3] = 120;
+      }
+    }
+    ctx.putImageData(overlay, 0, 0);
+  }, [highlightColor]);
+
+  // Active color count
+  const activeColorCount = useMemo(() => {
+    const palette = getPalette();
+    if (colorStats.size === 0) return { active: 0, total: palette.length };
+    let active = 0;
+    for (const color of palette) {
+      const stats = colorStats.get(color);
+      if (stats && stats.count > 0) active++;
+    }
+    return { active, total: palette.length };
+  }, [getPalette, colorStats]);
+
+  // Reset all settings to defaults
+  const handleResetSettings = useCallback(() => {
+    setTargetHeight(128);
+    setResamplingMethod('bilinear');
+    setDitherMethod('none');
+    setDitherStrength(100);
+    setPreprocessingMethod('none');
+    setPreprocessingStrength(50);
+    setPaletteMode('geopixels');
+    setUseKmeans(false);
+    setKmeansColors(16);
+    setBrightness(0);
+    setContrast(0);
+    setSaturation(0);
+    setColorMatchAlgorithm('oklab');
+    setPreserveDetailThreshold(0);
+    setFilterTrivialColors(false);
+    setTrivialThreshold(0.1);
+    setDisplayTrivialThreshold('0.1');
+    setTrivialThresholdMode('percent');
+    setPixeloeThickness(2);
+    setPixeloePatchSize(16);
+    setEdgeDetectBlur(0);
+    setEdgeDetectAlgorithm('sobel');
+    setAutoUpdate(true);
+    setIsPaletteVisualizationOpen(true);
+    setIsExtraFeaturesOpen(false);
+    localStorage.removeItem('pixelator_settings');
+  }, []);
 
   const sortedPalette = useMemo(() => {
     let currentPalette = getPalette();
@@ -955,21 +1171,101 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                             style={{ backgroundColor: color }}
                             onMouseEnter={(e) => {
                               setHoveredColor(color);
+                              setHighlightColor(color);
                               setHoverPos({ x: e.clientX, y: e.clientY });
                             }}
                             onMouseLeave={() => {
                               setHoveredColor(null);
+                              setHighlightColor(null);
                               setHoverPos(null);
                             }}
                             onMouseMove={(e) => {
                               setHoverPos({ x: e.clientX, y: e.clientY });
                             }}
+                            onClick={(e) => handleSwatchContextMenu(e, color)}
                           />
                         ))
                       ) : (
                         <div className="text-xs text-gray-500 p-2">No palette selected</div>
                       )}
                     </div>
+
+                    {/* Active color count */}
+                    {activeColorCount.total > 0 && colorStats.size > 0 && (
+                      <div className="text-xs text-gray-500">
+                        {activeColorCount.active} / {activeColorCount.total} colors used
+                      </div>
+                    )}
+
+                    {/* Context Menu */}
+                    {contextMenu && (
+                      <div
+                        style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 9999 }}
+                        className="bg-gray-800 border border-gray-600 rounded shadow-xl py-1 min-w-[160px]"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-700">
+                          <div className="w-3 h-3 border border-gray-500 rounded-sm" style={{ backgroundColor: contextMenu.color }} />
+                          <span className="text-xs font-mono text-gray-300">{contextMenu.color}</span>
+                        </div>
+                        {contextMenu.editing ? (
+                          <div className="px-3 py-2 space-y-2">
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="color"
+                                value={(contextMenu.editValue && /^#[0-9A-Fa-f]{6}$/i.test(contextMenu.editValue)) ? contextMenu.editValue : contextMenu.color}
+                                onChange={(e) => setContextMenu(prev => prev ? { ...prev, editValue: e.target.value.toUpperCase() } : null)}
+                                className="w-6 h-6 p-0 border border-gray-600 rounded cursor-pointer bg-transparent"
+                              />
+                              <input
+                                type="text"
+                                autoFocus
+                                value={contextMenu.editValue ?? contextMenu.color}
+                                onChange={(e) => setContextMenu(prev => prev ? { ...prev, editValue: e.target.value.toUpperCase() } : null)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleReplaceColor(contextMenu.color, contextMenu.editValue ?? contextMenu.color); if (e.key === 'Escape') setContextMenu(null); }}
+                                placeholder="#FF00FF"
+                                className="flex-1 min-w-0 bg-gray-900 border border-gray-600 rounded px-1.5 py-0.5 text-xs font-mono text-gray-200 focus:border-blue-500 focus:outline-none"
+                              />
+                            </div>
+                            <div className="flex gap-1.5">
+                              <button
+                                className="flex-1 px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded transition-colors"
+                                onClick={() => handleReplaceColor(contextMenu.color, contextMenu.editValue ?? contextMenu.color)}
+                              >
+                                Apply
+                              </button>
+                              <button
+                                className="flex-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded transition-colors"
+                                onClick={() => setContextMenu(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 hover:text-white"
+                              onClick={() => { navigator.clipboard.writeText(contextMenu.color); setContextMenu(null); }}
+                            >
+                              Copy Hex
+                            </button>
+                            <button
+                              className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 hover:text-white"
+                              onClick={() => setContextMenu(prev => prev ? { ...prev, editing: true, editValue: prev.color } : null)}
+                            >
+                              Edit Color
+                            </button>
+                            <button
+                              className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-gray-700 hover:text-red-300"
+                              onClick={() => handleRemoveColor(contextMenu.color)}
+                            >
+                              Remove Color
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
 
                     {/* Hover Tooltip */}
                     {hoveredColor && hoverPos && (
@@ -1117,6 +1413,15 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                             <option value="pixels">px</option>
                           </select>
                         </div>
+                        {colorStats.size > 0 && (
+                          <button
+                            onClick={handlePruneColors}
+                            className="w-full px-2 py-1 bg-red-900/50 hover:bg-red-800/60 text-red-300 text-xs rounded border border-red-700/50 transition-colors"
+                            title="Remove all palette colors that have zero pixels in the current preview"
+                          >
+                            Prune Unused Colors
+                          </button>
+                        )}
                       </div>
                     )}
 
@@ -1513,6 +1818,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
               <button onClick={handleZoomIn} className="bg-gray-700 p-1 rounded hover:bg-gray-600 text-sm font-bold" title="Zoom in">+</button>
               <button onClick={handleFitToScreen} className="bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 text-xs" title="Fit to screen">Fit</button>
               <button onClick={handleZoomReset} className="bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 text-xs" title="Reset zoom">Reset</button>
+              <button onClick={handleResetSettings} className="bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 text-xs text-yellow-400" title="Reset all pixelator settings to defaults">⟳ Settings</button>
             </div>
           </div>
 
@@ -1590,6 +1896,22 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                       imageRendering: 'pixelated',
                       clipPath: `polygon(0 0, ${comparePosition}% 0, ${comparePosition}% 100%, 0 100%)`,
                       pointerEvents: 'none',
+                    }}
+                  />
+                  {/* Color highlight overlay */}
+                  <canvas
+                    ref={highlightCanvasRef}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      imageRendering: 'pixelated',
+                      pointerEvents: 'none',
+                      clipPath: `polygon(0 0, ${comparePosition}% 0, ${comparePosition}% 100%, 0 100%)`,
+                      opacity: highlightColor ? 1 : 0,
+                      transition: 'opacity 100ms',
                     }}
                   />
                   {/* Slider divider line */}
