@@ -744,7 +744,10 @@ async function suggestMissingColors(
     imageData: ImageData, 
     paletteHex: string[], 
     numToSuggest: number,
-    preferDistinct: boolean = false
+    preferDistinct: boolean = false,
+    samplingMask?: number[] | null,
+    samplingMaskWidth?: number,
+    samplingMaskHeight?: number,
 ): Promise<string[]> {
     if (paletteHex.length === 0) return [];
     
@@ -754,6 +757,11 @@ async function suggestMissingColors(
     // Extract non-transparent pixels with sampling for performance
     const pixels = imageData.data;
     const pixelArray: number[][] = [];
+    const imgW = imageData.width;
+    const imgH = imageData.height;
+    
+    // Build a scaled mask lookup if sampling mask is provided
+    const hasMask = samplingMask && samplingMask.length > 0 && samplingMaskWidth && samplingMaskHeight;
     
     // Calculate step size to limit total pixels to approx 4096 (64x64) for performance
     const totalPixels = pixels.length / 4;
@@ -762,6 +770,16 @@ async function suggestMissingColors(
 
     for (let i = 0; i < pixels.length; i += step) {
         if (pixels[i + 3] > 128) {
+            // Check sampling mask if present
+            if (hasMask) {
+                const pixIdx = i / 4;
+                const px = pixIdx % imgW;
+                const py = Math.floor(pixIdx / imgW);
+                const mx = Math.floor(px * samplingMaskWidth! / imgW);
+                const my = Math.floor(py * samplingMaskHeight! / imgH);
+                const maskIdx = my * samplingMaskWidth! + mx;
+                if (maskIdx < samplingMask!.length && samplingMask![maskIdx] === 0) continue;
+            }
             pixelArray.push([pixels[i], pixels[i + 1], pixels[i + 2]]);
         }
     }
@@ -1725,8 +1743,8 @@ self.onmessage = async (e: MessageEvent) => {
     
     if (type === 'suggest') {
         try {
-            const { palette, numSuggestions, preferDistinct } = settings;
-            const suggestions = await suggestMissingColors(imageData, palette, numSuggestions || 5, preferDistinct || false);
+            const { palette, numSuggestions, preferDistinct, samplingMask, samplingMaskWidth, samplingMaskHeight } = settings;
+            const suggestions = await suggestMissingColors(imageData, palette, numSuggestions || 5, preferDistinct || false, samplingMask, samplingMaskWidth, samplingMaskHeight);
             self.postMessage({ type: 'suggestions', suggestions });
         } catch (error: any) {
             self.postMessage({ type: 'error', message: error.message });
@@ -1734,7 +1752,7 @@ self.onmessage = async (e: MessageEvent) => {
         return;
     }
 
-    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT, pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm } = settings;
+    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT, pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm, samplingMask, samplingMaskWidth, samplingMaskHeight } = settings;
     const colorMatchAlgorithm: ColorMatchAlgorithm = rawAlgo || 'oklab';
     const preserveDetailThreshold: number = rawPDT || 0;
 
@@ -1830,11 +1848,24 @@ self.onmessage = async (e: MessageEvent) => {
         // 2. K-Means
         let generatedPalette: string[] | undefined;
         if (useKmeans && kmeansColors > 0) {
-           // ... [Existing Kmeans logic] ...
            const pixels = resizedImageData.data;
+           const resW = resizedImageData.width;
+           const resH = resizedImageData.height;
+           const hasMask = samplingMask && samplingMask.length > 0 && samplingMaskWidth && samplingMaskHeight;
+           
+           // Collect pixels for K-Means (optionally filtered by sampling mask)
            const pixelArray: number[][] = [];
            for (let i = 0; i < pixels.length; i += 4) {
                 if (pixels[i + 3] > 128) {
+                    if (hasMask) {
+                        const pixIdx = i / 4;
+                        const px = pixIdx % resW;
+                        const py = Math.floor(pixIdx / resW);
+                        const mx = Math.floor(px * samplingMaskWidth / resW);
+                        const my = Math.floor(py * samplingMaskHeight / resH);
+                        const maskIdx = my * samplingMaskWidth + mx;
+                        if (maskIdx < samplingMask.length && samplingMask[maskIdx] === 0) continue;
+                    }
                     pixelArray.push([pixels[i], pixels[i + 1], pixels[i + 2]]);
                 }
            }

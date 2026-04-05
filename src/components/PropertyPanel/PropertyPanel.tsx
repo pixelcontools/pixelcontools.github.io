@@ -1,4 +1,5 @@
 import useCompositorStore from '../../store/compositorStore';
+import { Layer } from '../../types/compositor.types';
 import PositionInputs from './PositionInputs';
 import OpacityControl from './OpacityControl';
 import ColorAnalysis from './ColorAnalysis';
@@ -57,8 +58,12 @@ function PropertyPanel() {
             {/* Opacity Controls (if single layer selected) */}
             {selectedLayerIds.length === 1 && selectedLayers.length > 0 && <OpacityControl layer={selectedLayers[0]} />}
 
-            {/* Color Analysis (if single layer selected) */}
+            {/* Bulk Opacity Control (if multiple layers selected) */}
+            {selectedLayerIds.length > 1 && <BulkOpacityControl layers={selectedLayers} />}
+
+            {/* Color Analysis (single or multi-layer) */}
             {selectedLayerIds.length === 1 && selectedLayers.length > 0 && <ColorAnalysis layer={selectedLayers[0]} />}
+            {selectedLayerIds.length > 1 && selectedLayers.length > 1 && <ColorAnalysis layers={selectedLayers} />}
 
             {/* Shape Properties (if single shape layer selected) */}
             {selectedLayerIds.length === 1 && selectedLayers.length > 0 && selectedLayers[0].shapeType && (
@@ -271,6 +276,67 @@ function BulkPositionControls() {
         >
           ↓
         </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Bulk opacity control for multiple selected layers
+ * Shows average opacity and adjusts all selected layers in tandem
+ */
+function BulkOpacityControl({ layers }: { layers: Layer[] }) {
+  const updateLayer = useCompositorStore((state) => state.updateLayer);
+
+  const avgOpacity = layers.length > 0
+    ? layers.reduce((sum, l) => sum + (l.opacity ?? 1), 0) / layers.length
+    : 1;
+
+  const handleOpacityChange = (value: number) => {
+    const newOpacity = Math.max(0, Math.min(1, value / 100));
+    // Calculate delta from average to apply proportionally
+    const delta = newOpacity - avgOpacity;
+    for (const layer of layers) {
+      const current = layer.opacity ?? 1;
+      const updated = Math.max(0, Math.min(1, current + delta));
+      updateLayer(layer.id, { opacity: updated });
+    }
+  };
+
+  return (
+    <div className="bg-panel-bg rounded p-3 space-y-2" data-region="bulk-opacity-control">
+      <div className="text-xs font-semibold text-gray-300">Opacity ({layers.length} layers)</div>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        value={Math.round(avgOpacity * 100)}
+        onChange={(e) => handleOpacityChange(parseInt(e.target.value))}
+        className="w-full h-2 bg-canvas-bg rounded appearance-none cursor-pointer accent-blue-400"
+        aria-label="Bulk layer opacity"
+      />
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-400">{Math.round(avgOpacity * 100)}% avg</span>
+        <div className="flex gap-1">
+          <button
+            onClick={() => handleOpacityChange(50)}
+            className="px-2 py-1 text-xs bg-canvas-bg hover:bg-border rounded transition"
+            title="50% opacity"
+          >
+            50%
+          </button>
+          <button
+            onClick={() => {
+              for (const layer of layers) {
+                updateLayer(layer.id, { opacity: 1 });
+              }
+            }}
+            className="px-2 py-1 text-xs bg-canvas-bg hover:bg-border rounded transition"
+            title="100% opacity"
+          >
+            100%
+          </button>
+        </div>
       </div>
     </div>
   );

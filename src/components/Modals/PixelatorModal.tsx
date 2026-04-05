@@ -3,6 +3,7 @@ import DraggableModal from './DraggableModal';
 import EyedropperModal from './EyedropperModal';
 import GeoPixelsPaletteModal from './GeoPixelsPaletteModal';
 import GradientPickerModal from './GradientPickerModal';
+import SamplingMaskModal from './SamplingMaskModal';
 import { usePortraitMode } from '../../hooks/usePortraitMode';
 import useCompositorStore from '../../store/compositorStore';
 import { Layer } from '../../types/compositor.types';
@@ -132,6 +133,17 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
 
   // Gradient picker modal state
   const [isGradientPickerOpen, setIsGradientPickerOpen] = useState<boolean>(false);
+
+  // Sampling mask state
+  const [samplingMaskEnabled, setSamplingMaskEnabled] = useState<boolean>(false);
+  const [samplingMask, setSamplingMask] = useState<Uint8Array | null>(null);
+  const [samplingMaskDims, setSamplingMaskDims] = useState<{ w: number; h: number } | null>(null);
+  const [isSamplingMaskModalOpen, setIsSamplingMaskModalOpen] = useState<boolean>(false);
+
+  // Presets state
+  const [isPresetsModalOpen, setIsPresetsModalOpen] = useState<boolean>(false);
+  const [presets, setPresets] = useState<{ name: string; settings: Record<string, any> }[]>([]);
+  const [presetName, setPresetName] = useState<string>('');
 
   const workerRef = useRef<Worker | null>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -271,6 +283,11 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
         if (s.isExtraFeaturesOpen != null) setIsExtraFeaturesOpen(s.isExtraFeaturesOpen);
       }
     } catch { /* ignore corrupt data */ }
+    // Load presets
+    try {
+      const rawPresets = localStorage.getItem('pixelator_presets');
+      if (rawPresets) setPresets(JSON.parse(rawPresets));
+    } catch { /* ignore */ }
     setSettingsLoaded(true);
   }, []);
 
@@ -449,13 +466,16 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           pixeloePatchSize,
           edgeDetectBlur,
           edgeDetectAlgorithm,
-          colorStats: []
+          colorStats: [],
+          samplingMask: samplingMaskEnabled && samplingMask ? Array.from(samplingMask) : null,
+          samplingMaskWidth: samplingMaskDims?.w || 0,
+          samplingMaskHeight: samplingMaskDims?.h || 0,
         }
       });
     };
     img.src = layer.imageData;
 
-  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm, preserveDetailThreshold, pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm, createWorker]);
+  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm, preserveDetailThreshold, pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm, createWorker, samplingMaskEnabled, samplingMask, samplingMaskDims]);
 
   // Debounced Effect
   useEffect(() => {
@@ -616,12 +636,15 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
         settings: {
           palette,
           numSuggestions: suggestCount,
-          preferDistinct: preferDistinctColors
+          preferDistinct: preferDistinctColors,
+          samplingMask: samplingMaskEnabled && samplingMask ? Array.from(samplingMask) : null,
+          samplingMaskWidth: samplingMaskDims?.w || 0,
+          samplingMaskHeight: samplingMaskDims?.h || 0,
         }
       });
     };
     img.src = layer.imageData;
-  }, [layer.imageData, getEffectivePalette, suggestCount, preferDistinctColors]);
+  }, [layer.imageData, getEffectivePalette, suggestCount, preferDistinctColors, samplingMaskEnabled, samplingMask, samplingMaskDims]);
 
   const handleAddSuggestedToCustom = () => {
     const existingText = customPaletteInput.trim();
@@ -766,8 +789,80 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     setAutoUpdate(true);
     setIsPaletteVisualizationOpen(true);
     setIsExtraFeaturesOpen(false);
+    setSamplingMaskEnabled(false);
+    setSamplingMask(null);
+    setSamplingMaskDims(null);
     localStorage.removeItem('pixelator_settings');
   }, []);
+
+  // ─── Preset management ─────────────────────────────────────────────
+  const getCurrentSettings = useCallback((): Record<string, any> => ({
+    targetHeight, resamplingMethod, ditherMethod, ditherStrength,
+    preprocessingMethod, preprocessingStrength, paletteMode,
+    useKmeans, kmeansColors, brightness, contrast, saturation,
+    colorMatchAlgorithm, preserveDetailThreshold,
+    filterTrivialColors, trivialThreshold, trivialThresholdMode,
+    pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm,
+    autoUpdate, customPaletteInput,
+  }), [targetHeight, resamplingMethod, ditherMethod, ditherStrength,
+    preprocessingMethod, preprocessingStrength, paletteMode,
+    useKmeans, kmeansColors, brightness, contrast, saturation,
+    colorMatchAlgorithm, preserveDetailThreshold,
+    filterTrivialColors, trivialThreshold, trivialThresholdMode,
+    pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm,
+    autoUpdate, customPaletteInput]);
+
+  const savePreset = useCallback((name: string) => {
+    if (!name.trim()) return;
+    const newPreset = { name: name.trim(), settings: getCurrentSettings() };
+    const updated = [...presets, newPreset];
+    setPresets(updated);
+    localStorage.setItem('pixelator_presets', JSON.stringify(updated));
+    setPresetName('');
+  }, [getCurrentSettings, presets]);
+
+  const loadPreset = useCallback((settings: Record<string, any>) => {
+    if (settings.targetHeight != null) setTargetHeight(settings.targetHeight);
+    if (settings.resamplingMethod) setResamplingMethod(settings.resamplingMethod);
+    if (settings.ditherMethod) setDitherMethod(settings.ditherMethod);
+    if (settings.ditherStrength != null) setDitherStrength(settings.ditherStrength);
+    if (settings.preprocessingMethod) setPreprocessingMethod(settings.preprocessingMethod);
+    if (settings.preprocessingStrength != null) setPreprocessingStrength(settings.preprocessingStrength);
+    if (settings.paletteMode) setPaletteMode(settings.paletteMode);
+    if (settings.useKmeans != null) setUseKmeans(settings.useKmeans);
+    if (settings.kmeansColors != null) setKmeansColors(settings.kmeansColors);
+    if (settings.brightness != null) setBrightness(settings.brightness);
+    if (settings.contrast != null) setContrast(settings.contrast);
+    if (settings.saturation != null) setSaturation(settings.saturation);
+    if (settings.colorMatchAlgorithm) setColorMatchAlgorithm(settings.colorMatchAlgorithm);
+    if (settings.preserveDetailThreshold != null) setPreserveDetailThreshold(settings.preserveDetailThreshold);
+    if (settings.filterTrivialColors != null) setFilterTrivialColors(settings.filterTrivialColors);
+    if (settings.trivialThreshold != null) { setTrivialThreshold(settings.trivialThreshold); setDisplayTrivialThreshold(String(settings.trivialThreshold)); }
+    if (settings.trivialThresholdMode) setTrivialThresholdMode(settings.trivialThresholdMode);
+    if (settings.pixeloeThickness != null) setPixeloeThickness(settings.pixeloeThickness);
+    if (settings.pixeloePatchSize != null) setPixeloePatchSize(settings.pixeloePatchSize);
+    if (settings.edgeDetectBlur != null) setEdgeDetectBlur(settings.edgeDetectBlur);
+    if (settings.edgeDetectAlgorithm) setEdgeDetectAlgorithm(settings.edgeDetectAlgorithm);
+    if (settings.autoUpdate != null) setAutoUpdate(settings.autoUpdate);
+    if (settings.customPaletteInput != null) setCustomPaletteInput(settings.customPaletteInput);
+    debounceTimeRef.current = 100;
+    setIsPresetsModalOpen(false);
+  }, []);
+
+  const deletePreset = useCallback((index: number) => {
+    const updated = presets.filter((_, i) => i !== index);
+    setPresets(updated);
+    localStorage.setItem('pixelator_presets', JSON.stringify(updated));
+  }, [presets]);
+
+  const movePreset = useCallback((index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= presets.length) return;
+    const updated = [...presets];
+    [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+    setPresets(updated);
+    localStorage.setItem('pixelator_presets', JSON.stringify(updated));
+  }, [presets]);
 
   const sortedPalette = useMemo(() => {
     let currentPalette = getPalette();
@@ -1568,6 +1663,40 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
               )}
             </div>
 
+            {/* Color Sampling Mask */}
+            {(paletteMode === 'none' || paletteMode === 'custom' || paletteMode === 'geopixels+custom') && (
+              <div className="space-y-2">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={samplingMaskEnabled}
+                    onChange={(e) => setSamplingMaskEnabled(e.target.checked)}
+                  />
+                  <span className="text-xs font-semibold text-gray-400 uppercase">Apply Sampling Mask</span>
+                </label>
+                {samplingMaskEnabled && (
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => setIsSamplingMaskModalOpen(true)}
+                      className="w-full px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-medium rounded transition-colors"
+                    >
+                      Configure Mask...
+                    </button>
+                    {samplingMask && (
+                      <div className="text-xs text-gray-500 bg-gray-800 rounded px-2 py-1">
+                        Mask active — {samplingMask.reduce((s, v) => s + (v > 0 ? 1 : 0), 0).toLocaleString()} px selected
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500">
+                      {paletteMode === 'none'
+                        ? 'K-Means will only sample colors from the masked region.'
+                        : 'Color suggestions will only sample from the masked region.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Extra Features */}
             <div className="space-y-2 border-t border-gray-700 pt-2">
               <button
@@ -1819,6 +1948,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
               <button onClick={handleFitToScreen} className="bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 text-xs" title="Fit to screen">Fit</button>
               <button onClick={handleZoomReset} className="bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 text-xs" title="Reset zoom">Reset</button>
               <button onClick={handleResetSettings} className="bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 text-xs text-yellow-400" title="Reset all pixelator settings to defaults">⟳ Settings</button>
+              <button onClick={() => setIsPresetsModalOpen(true)} className="bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 text-xs text-blue-400" title="Save/load pixelation presets">Presets...</button>
             </div>
           </div>
 
@@ -2013,6 +2143,93 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           imageDataUrl={layer.imageData}
           onAddColors={handleEyedropperColors}
         />
+
+        {/* Sampling Mask Modal */}
+        <SamplingMaskModal
+          isOpen={isSamplingMaskModalOpen}
+          onClose={() => setIsSamplingMaskModalOpen(false)}
+          imageData={layer.imageData}
+          existingMask={samplingMask}
+          onApply={(mask, w, h) => {
+            setSamplingMask(mask);
+            setSamplingMaskDims({ w, h });
+          }}
+        />
+
+        {/* Presets Modal */}
+        {isPresetsModalOpen && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50" onClick={() => setIsPresetsModalOpen(false)}>
+            <div className="bg-gray-800 border border-gray-600 rounded-lg shadow-xl w-96 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+                <h3 className="text-sm font-semibold text-gray-200">Pixelation Presets</h3>
+                <button onClick={() => setIsPresetsModalOpen(false)} className="text-gray-400 hover:text-white text-lg">×</button>
+              </div>
+
+              {/* Save new preset */}
+              <div className="px-4 py-3 border-b border-gray-700 flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Preset name..."
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') savePreset(presetName); }}
+                  className="flex-1 bg-gray-900 border border-gray-600 rounded px-2 py-1.5 text-sm text-gray-200"
+                />
+                <button
+                  onClick={() => savePreset(presetName)}
+                  disabled={!presetName.trim()}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-xs font-medium rounded transition-colors"
+                >
+                  Save Current
+                </button>
+              </div>
+
+              {/* Preset list */}
+              <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                {presets.length === 0 ? (
+                  <div className="text-center text-sm text-gray-500 py-8">No presets saved yet</div>
+                ) : (
+                  presets.map((preset, idx) => (
+                    <div key={idx} className="flex items-center gap-1 bg-gray-900 rounded p-2 group">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-gray-200 truncate">{preset.name}</div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {preset.settings.paletteMode} · {preset.settings.targetHeight}px · {preset.settings.resamplingMethod}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => loadPreset(preset.settings)}
+                        className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded transition-colors flex-shrink-0"
+                      >
+                        Load
+                      </button>
+                      <button
+                        onClick={() => movePreset(idx, 'up')}
+                        disabled={idx === 0}
+                        className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 text-gray-400 text-xs rounded transition-colors disabled:opacity-30 flex-shrink-0"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        onClick={() => movePreset(idx, 'down')}
+                        disabled={idx === presets.length - 1}
+                        className="px-1.5 py-1 bg-gray-700 hover:bg-gray-600 text-gray-400 text-xs rounded transition-colors disabled:opacity-30 flex-shrink-0"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        onClick={() => deletePreset(idx)}
+                        className="px-1.5 py-1 bg-red-800 hover:bg-red-700 text-red-300 text-xs rounded transition-colors flex-shrink-0"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )} />
   );

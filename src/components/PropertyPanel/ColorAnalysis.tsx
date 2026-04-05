@@ -10,12 +10,15 @@ interface ColorCount {
 }
 
 /**
- * Analyzes a layer's image data to extract color information
- * Handles both RGB and RGBA color analysis with deduplication
+ * Analyzes layer(s) image data to extract color information
+ * Supports single or multiple layers — when multiple layers are provided,
+ * colors are analyzed from ALL layers combined (not composited)
  * Uses efficient virtual scrolling for large color sets
- * Supports unloading results to free memory
  */
-function ColorAnalysis({ layer }: { layer: Layer }) {
+function ColorAnalysis({ layer, layers }: { layer?: Layer; layers?: Layer[] }) {
+  // Determine effective list of layers to analyze
+  const effectiveLayers = layers || (layer ? [layer] : []);
+  const layerIdKey = effectiveLayers.map(l => l.id).join(',');
   const [colorsRGB, setColorsRGB] = useState<ColorCount[] | null>(null);
   const [colorsRGBA, setColorsRGBA] = useState<ColorCount[] | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -25,13 +28,13 @@ function ColorAnalysis({ layer }: { layer: Layer }) {
   const scrollContainerRGBARef = useRef<HTMLDivElement>(null);
   const itemHeightRef = useRef(28); // Approximate height of each color item in pixels
 
-  // Clear results when layer changes to avoid showing stale data
+  // Clear results when layer(s) change to avoid showing stale data
   useEffect(() => {
     setColorsRGB(null);
     setColorsRGBA(null);
     setVisibleColorsRGB(new Set());
     setVisibleColorsRGBA(new Set());
-  }, [layer.id]);
+  }, [layerIdKey]);
 
   // Virtual scroll handler for RGB colors
   const handleScrollRGB = () => {
@@ -95,51 +98,57 @@ function ColorAnalysis({ layer }: { layer: Layer }) {
       const analyzeColors = async (includeAlpha: boolean) => {
     setIsAnalyzing(true);
     try {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          console.error('Failed to get canvas context');
-          setIsAnalyzing(false);
-          return;
-        }
+      // Collect image data from all layers
+      const allImageDatas: ImageData[] = [];
+      
+      for (const l of effectiveLayers) {
+        await new Promise<void>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { resolve(); return; }
+            ctx.drawImage(img, 0, 0);
+            allImageDatas.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+            resolve();
+          };
+          img.onerror = () => { reject(new Error('Failed to load image')); };
+          img.src = l.imageData;
+        });
+      }
 
-        ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
+      if (allImageDatas.length === 0) {
+        setIsAnalyzing(false);
+        return;
+      }
 
-        if (includeAlpha) {
-          // RGBA mode: Count colors with alpha channel
+      if (includeAlpha) {
+          // RGBA mode: Count colors with alpha channel across all layers
           const colorMap = new Map<string, number>();
           let totalPixels = 0;
 
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const a = data[i + 3];
-
-            // Skip fully transparent pixels
-            if (a === 0) continue;
-
-            totalPixels++;
-
-            // Create hex string with alpha
-            const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase()}`;
-            const hexWithAlpha = `${hex}${a.toString(16).padStart(2, '0').toUpperCase()}`;
-            colorMap.set(hexWithAlpha, (colorMap.get(hexWithAlpha) || 0) + 1);
+          for (const imageData of allImageDatas) {
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+              const r = data[i];
+              const g = data[i + 1];
+              const b = data[i + 2];
+              const a = data[i + 3];
+              if (a === 0) continue;
+              totalPixels++;
+              const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase()}`;
+              const hexWithAlpha = `${hex}${a.toString(16).padStart(2, '0').toUpperCase()}`;
+              colorMap.set(hexWithAlpha, (colorMap.get(hexWithAlpha) || 0) + 1);
+            }
           }
 
-          // Convert to array and calculate percentages
           totalPixels = Math.max(1, totalPixels);
           const colors: ColorCount[] = Array.from(colorMap.entries())
             .map(([colorKey, pixelCount]) => {
               const hex = colorKey.substring(0, 7);
               const alpha = parseInt(colorKey.substring(7), 16);
-
               return {
                 hex,
                 count: pixelCount,
@@ -148,39 +157,30 @@ function ColorAnalysis({ layer }: { layer: Layer }) {
                 alpha,
               };
             })
-            .filter(color => {
-              // Filter out fully transparent pixels
-              if (color.hex === '#000000' && color.alpha === 0) {
-                return false;
-              }
-              return true;
-            })
-            .sort((a, b) => b.count - a.count); // Sort by frequency descending
+            .filter(color => !(color.hex === '#000000' && color.alpha === 0))
+            .sort((a, b) => b.count - a.count);
 
           setColorsRGBA(colors);
           setVisibleColorsRGBA(new Set());
         } else {
-          // RGB mode: Count only fully opaque colors, deduplicate by hex only
+          // RGB mode: Count only fully opaque colors across all layers
           const colorMap = new Map<string, number>();
           let totalPixels = 0;
 
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const a = data[i + 3];
-
-            // Skip any non-fully-opaque pixels (including semi-transparent)
-            if (a !== 255) continue;
-
-            totalPixels++;
-
-            // Create hex string (ignoring alpha)
-            const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase()}`;
-            colorMap.set(hex, (colorMap.get(hex) || 0) + 1);
+          for (const imageData of allImageDatas) {
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+              const r = data[i];
+              const g = data[i + 1];
+              const b = data[i + 2];
+              const a = data[i + 3];
+              if (a !== 255) continue;
+              totalPixels++;
+              const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase()}`;
+              colorMap.set(hex, (colorMap.get(hex) || 0) + 1);
+            }
           }
 
-          // Convert to array and calculate percentages
           totalPixels = Math.max(1, totalPixels);
           const colors: ColorCount[] = Array.from(colorMap.entries())
             .map(([hex, pixelCount]) => ({
@@ -190,19 +190,13 @@ function ColorAnalysis({ layer }: { layer: Layer }) {
               hasAlpha: false,
               alpha: undefined,
             }))
-            .sort((a, b) => b.count - a.count); // Sort by frequency descending
+            .sort((a, b) => b.count - a.count);
 
           setColorsRGB(colors);
           setVisibleColorsRGB(new Set());
         }
-      };
-
-      img.onerror = () => {
-        console.error('Failed to load image for color analysis');
-        setIsAnalyzing(false);
-      };
-
-      img.src = layer.imageData;
+    } catch (err) {
+      console.error('Color analysis failed:', err);
     } finally {
       setIsAnalyzing(false);
     }
