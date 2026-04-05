@@ -1230,6 +1230,9 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                       🌈 Gradients
                     </button>
                     <div className="flex-1" />
+                    <div className="invisible">
+                      <span className="cursor-help text-xs text-blue-400">?</span>
+                    </div>
                   </div>
                 </div>
               )}
