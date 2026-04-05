@@ -551,9 +551,10 @@ function findClosestColor(
 
     let result: FindClosestResult;
 
-    // Preserve detail: if the closest color is within the threshold, keep original pixel
+    // Preserve detail: if the closest palette color is within the threshold,
+    // use it directly (skip dithering perturbation) but still map to the palette color
     if (preserveDetailThreshold > 0 && minDist <= preserveDetailThreshold) {
-      result = { color: matchPixel, dist: 0, index: closestIndex };
+      result = { color: closest, dist: 0, index: closestIndex };
     } else {
       result = { color: closest, dist: minDist, index: closestIndex };
     }
