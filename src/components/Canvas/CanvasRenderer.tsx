@@ -226,12 +226,14 @@ function CanvasRenderer() {
       // console.log(`[DEBUG] Layer rendered: ${layer.name} at (${x}, ${y}) with opacity ${ctx.globalAlpha}`);
     }
 
-    // Draw 1px export border preview on top of all layers
+    // Draw export border preview on top of all layers
     if (project.canvas.exportBorderEnabled) {
+      const bw = project.canvas.exportBorderWidth ?? 1;
       ctx.globalAlpha = 1;
       ctx.strokeStyle = project.canvas.exportBorderColor ?? '#FF0000';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
+      ctx.lineWidth = bw;
+      const half = bw / 2;
+      ctx.strokeRect(half, half, canvas.width - bw, canvas.height - bw);
     }
   }, [project, loadedImages, isDraggingLayer, dragLayerId, dragOffsetX, dragOffsetY]);
 

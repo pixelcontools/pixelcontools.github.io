@@ -1,6 +1,6 @@
 ---
 description: "Use when working on image processing, color manipulation, transparency masking, background removal, pixelation, or PNG export. Covers color preservation pipeline and worker communication."
-applyTo: "src/utils/imageProcessing.ts, src/utils/textRasterizer.ts, src/utils/shapeRasterizer.ts, src/workers/**, src/components/Modals/PixelatorModal.tsx, src/components/Modals/BgRemovalModal.tsx, src/components/Modals/TransparencyMaskModal.tsx"
+applyTo: "src/utils/imageProcessing.ts, src/utils/textRasterizer.ts, src/utils/shapeRasterizer.ts, src/utils/projectSerializer.ts, src/workers/**, src/components/Modals/PixelatorModal.tsx, src/components/Modals/BgRemovalModal.tsx, src/components/Modals/TransparencyMaskModal.tsx"
 ---
 
 # Image Processing Rules
@@ -44,7 +44,7 @@ Runs in a Web Worker for non-blocking processing:
 1. Create offscreen canvas at `canvasWidth × canvasHeight × scaleMultiplier`
 2. Set `imageSmoothingEnabled = false`
 3. Composite visible layers (sorted by zIndex, filter out preview layers)
-4. Apply export border if `exportBorderEnabled`
+4. Apply export border if `exportBorderEnabled` (width from `exportBorderWidth`, color from `exportBorderColor`)
 5. `canvas.toBlob('image/png')` → download
 
 ## Background Removal

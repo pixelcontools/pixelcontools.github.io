@@ -37,6 +37,7 @@ const DEFAULT_PROJECT_DATA: ProjectData = {
     dragInfoEnabled: true,
     exportBorderEnabled: false,
     exportBorderColor: '#FF0000',
+    exportBorderWidth: 1,
   },
   viewport: {
     zoom: 100,

@@ -213,7 +213,7 @@ function CanvasSettings() {
             </label>
           </div>
 
-          {/* 1px export border */}
+          {/* Export border */}
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -221,11 +221,11 @@ function CanvasSettings() {
               checked={canvas.exportBorderEnabled ?? false}
               onChange={(e) => setCanvasConfig({ exportBorderEnabled: e.target.checked })}
               className="w-4 h-4 rounded cursor-pointer"
-              title="Draw a 1px border along canvas edges on exported PNG"
-              aria-label="Draw 1px border on exported PNG"
+              title="Draw a border along canvas edges on exported PNG"
+              aria-label="Draw border on exported PNG"
             />
             <label htmlFor="input-export-border-enabled" className="text-xs text-gray-400 cursor-pointer">
-              1px
+              Border
             </label>
             <input
               type="color"
@@ -234,10 +234,37 @@ function CanvasSettings() {
               onChange={(e) => setCanvasConfig({ exportBorderColor: e.target.value })}
               disabled={!(canvas.exportBorderEnabled ?? false)}
               className="w-6 h-6 rounded cursor-pointer border border-border disabled:opacity-30"
-              title="1px export border color"
-              aria-label="1px export border color"
+              title="Export border color"
+              aria-label="Export border color"
             />
           </div>
+          {(canvas.exportBorderEnabled ?? false) && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <label className="text-xs text-gray-400 whitespace-nowrap">W</label>
+              <input
+                type="range"
+                min="1"
+                max="20"
+                value={canvas.exportBorderWidth ?? 1}
+                onChange={(e) => setCanvasConfig({ exportBorderWidth: Number(e.target.value) })}
+                className="w-24 min-w-0"
+                title="Export border width in pixels"
+              />
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={canvas.exportBorderWidth ?? 1}
+                onChange={(e) => {
+                  const v = Math.max(1, Math.min(100, Number(e.target.value) || 1));
+                  setCanvasConfig({ exportBorderWidth: v });
+                }}
+                className="w-10 flex-shrink-0 bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-xs text-center"
+                title="Export border width in pixels"
+              />
+              <span className="text-xs text-gray-500 flex-shrink-0">px</span>
+            </div>
+          )}
         </div>
       </div>
 

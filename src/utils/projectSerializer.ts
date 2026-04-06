@@ -192,7 +192,7 @@ export async function exportCanvasToPNG(
   height: number,
   scale: number = 1,
   backgroundColor: string | null = null,
-  canvasConfig?: { exportBorderEnabled?: boolean; exportBorderColor?: string }
+  canvasConfig?: { exportBorderEnabled?: boolean; exportBorderColor?: string; exportBorderWidth?: number }
 ): Promise<Blob> {
   const exportCanvas = document.createElement('canvas');
   exportCanvas.width = width * scale;
@@ -233,12 +233,14 @@ export async function exportCanvasToPNG(
     }
   }
 
-  // Draw 1px export border if enabled (drawn last, on top of all layers)
+  // Draw export border if enabled (drawn last, on top of all layers)
   if (canvasConfig?.exportBorderEnabled) {
+    const bw = (canvasConfig.exportBorderWidth ?? 1) / scale; // consistent physical pixels regardless of scale
     ctx.globalAlpha = 1;
     ctx.strokeStyle = canvasConfig.exportBorderColor ?? '#FF0000';
-    ctx.lineWidth = 1 / scale; // 1 physical pixel regardless of scale
-    ctx.strokeRect(0.5 / scale, 0.5 / scale, width - 1 / scale, height - 1 / scale);
+    ctx.lineWidth = bw;
+    const half = bw / 2;
+    ctx.strokeRect(half, half, width - bw, height - bw);
   }
 
   return new Promise((resolve) => {

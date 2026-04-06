@@ -79,6 +79,16 @@ A `Layer` has universal fields (`id`, `name`, `imageData`, `x`, `y`, `zIndex`, `
 - `CHANGELOG.md` — Version history
 - `docs/decisions/` — Architectural Decision Records (ADRs)
 
+## Agent Workflow
+
+### Before editing code
+1. Read ALL `.github/instructions/*.instructions.md` files whose `applyTo` patterns match files you plan to change
+2. Follow the rules in those instruction files (history patterns, pixel-perfect rendering, color preservation, etc.)
+
+### After completing feature work
+1. Invoke the **knowledge-keeper** skill — it will update instructions, CHANGELOG, and create ADRs as needed
+2. For non-trivial bugs or architectural decisions, the skill will prompt you through ADR creation in `docs/decisions/`
+
 ## File Conventions
 
 - Components: PascalCase folders with PascalCase `.tsx` files

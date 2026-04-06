@@ -1,6 +1,6 @@
 ---
 description: "Use when modifying Zustand store, state management, undo/redo history, or layer operations. Covers store mutation patterns and history rules."
-applyTo: "src/store/**, src/types/compositor.types.ts"
+applyTo: "src/store/**, src/types/compositor.types.ts, src/components/PropertyPanel/**"
 ---
 
 # Store & State Management Patterns
@@ -22,9 +22,10 @@ AppState
 ## Mutation Rules
 
 1. **All mutations go through store methods** — never `set()` from outside the store
-2. **Call `pushHistory()` before destructive changes** — adding/removing/reordering layers, moving layers, changing canvas config
-3. **Do NOT call `pushHistory()` for**: viewport changes (pan/zoom), selection changes, UI state, grid/ruler toggles
-4. **Set `isDirty: true`** after any project data mutation (but NOT for viewport/UI changes)
+2. **`useAutoHistory` hook auto-pushes history** — it watches `project` (excluding viewport), debounces 500ms, and calls `pushHistory()` automatically. Most mutations don't need manual `pushHistory()` calls.
+3. **Call `pushHistory()` manually only for** batch/drag operations where you need precise undo boundaries (e.g., `stopDraggingLayer`)
+4. **Do NOT call `pushHistory()` for**: viewport changes (pan/zoom), selection changes, UI state, grid/ruler toggles
+5. **Set `isDirty: true`** after any project data mutation (but NOT for viewport/UI changes)
 
 ## History System
 
