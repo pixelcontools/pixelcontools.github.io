@@ -3,6 +3,7 @@ import DraggableModal from './DraggableModal';
 import EyedropperModal from './EyedropperModal';
 import GeoPixelsPaletteModal from './GeoPixelsPaletteModal';
 import GradientPickerModal from './GradientPickerModal';
+import GroupNoiseModal from './GroupNoiseModal';
 import SamplingMaskModal from './SamplingMaskModal';
 import { usePortraitMode } from '../../hooks/usePortraitMode';
 import useCompositorStore from '../../store/compositorStore';
@@ -133,6 +134,9 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
 
   // Gradient picker modal state
   const [isGradientPickerOpen, setIsGradientPickerOpen] = useState<boolean>(false);
+
+  // Group noise modal state
+  const [isGroupNoiseOpen, setIsGroupNoiseOpen] = useState<boolean>(false);
 
   // Sampling mask state
   const [samplingMaskEnabled, setSamplingMaskEnabled] = useState<boolean>(false);
@@ -1203,16 +1207,16 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setIsEyedropperOpen(true)}
-                      className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium rounded transition-colors"
+                      className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-red-300 text-xs font-medium rounded transition-colors"
                     >
                       Eyedropper
                     </button>
                     <button
                       onClick={() => setIsGeoPixelsPaletteOpen(true)}
-                      className="flex-1 px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-medium rounded transition-colors"
+                      className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-blue-300 text-xs font-medium rounded transition-colors"
                       title="Fetch your owned colors from GeoPixels"
                     >
-                      🎨 My Colors
+                      My Colors
                     </button>
                     <div className="group relative">
                       <span className="cursor-help text-xs text-blue-400">?</span>
@@ -1224,12 +1228,18 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setIsGradientPickerOpen(true)}
-                      className="flex-1 px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-medium rounded transition-colors"
+                      className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-purple-300 text-xs font-medium rounded transition-colors"
                       title="Drag across the image to capture gradient colors"
                     >
-                      🌈 Gradients
+                      Gradients
                     </button>
-                    <div className="flex-1" />
+                    <button
+                      onClick={() => setIsGroupNoiseOpen(true)}
+                      className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-yellow-300 text-xs font-medium rounded transition-colors"
+                      title="Detect and merge colors that are too similar (triggers Group Noise on GeoPixels)"
+                    >
+                      Group Noise
+                    </button>
                     <div className="invisible">
                       <span className="cursor-help text-xs text-blue-400">?</span>
                     </div>
@@ -2145,6 +2155,17 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           onClose={() => setIsGradientPickerOpen(false)}
           imageDataUrl={layer.imageData}
           onAddColors={handleEyedropperColors}
+        />
+
+        {/* Group Noise Modal */}
+        <GroupNoiseModal
+          isOpen={isGroupNoiseOpen}
+          onClose={() => setIsGroupNoiseOpen(false)}
+          palette={getPalette()}
+          onApply={(reduced) => {
+            setCustomPaletteInput(reduced.join(', '));
+            if (paletteMode !== 'custom') setPaletteMode('custom');
+          }}
         />
 
         {/* Sampling Mask Modal */}
