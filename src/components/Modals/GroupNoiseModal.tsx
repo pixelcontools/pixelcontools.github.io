@@ -106,7 +106,9 @@ const GroupNoiseModal: React.FC<GroupNoiseModalProps> = ({ isOpen, onClose, pale
       if (group.members.length === 1) {
         result.push(group.members[0]);
       } else {
-        if (group.choice === '__average__') {
+        if (group.choice === '__keep_all__') {
+          result.push(...group.members);
+        } else if (group.choice === '__average__') {
           result.push(averageColors(group.members));
         } else {
           result.push(group.choice);
@@ -218,9 +220,11 @@ const GroupNoiseModal: React.FC<GroupNoiseModalProps> = ({ isOpen, onClose, pale
                   <span className="text-xs font-semibold text-yellow-400">
                     Group ({group.members.length} colors)
                   </span>
-                  <span className="text-xs text-gray-500">
-                    — these will trigger Group Noise on GeoPixels
-                  </span>
+                  {thresholdSq <= 2 && (
+                    <span className="text-xs text-gray-500">
+                      — these will trigger Group Noise on GeoPixels
+                    </span>
+                  )}
                 </div>
 
                 {/* Color options */}
@@ -276,6 +280,32 @@ const GroupNoiseModal: React.FC<GroupNoiseModalProps> = ({ isOpen, onClose, pale
                     />
                     <span className="text-xs font-mono text-gray-300">{avg}</span>
                     <span className="text-[10px] text-purple-400 bg-purple-900/30 px-1 rounded">average</span>
+                  </label>
+
+                  {/* Keep all option */}
+                  <label
+                    className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer transition-colors ${
+                      group.choice === '__keep_all__' ? 'bg-blue-900/40 border border-blue-600/50' : 'hover:bg-gray-800 border border-transparent'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name={`group-${groupIdx}`}
+                      checked={group.choice === '__keep_all__'}
+                      onChange={() => setChoice(groupIdx, '__keep_all__')}
+                      className="accent-blue-500"
+                    />
+                    <div className="flex -space-x-1">
+                      {group.members.map((c) => (
+                        <div
+                          key={c}
+                          className="w-4 h-4 rounded border border-gray-600 flex-shrink-0"
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-xs text-gray-300">Keep all</span>
+                    <span className="text-[10px] text-green-400 bg-green-900/30 px-1 rounded">no change</span>
                   </label>
                 </div>
               </div>
