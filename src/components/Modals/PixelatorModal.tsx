@@ -1036,7 +1036,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
 
                 {resultDimensions && (
                   <div className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded whitespace-nowrap">
-                    {resultDimensions.width} × {resultDimensions.height} <span className="text-gray-600 mx-1">|</span> {(resultDimensions.width * resultDimensions.height).toLocaleString()} px
+                    {resultDimensions.width} × {resultDimensions.height} <span className="text-gray-600 mx-1">|</span> {Array.from(colorStats.values()).reduce((sum, s) => sum + s.count, 0).toLocaleString()} px
                   </div>
                 )}
               </div>
