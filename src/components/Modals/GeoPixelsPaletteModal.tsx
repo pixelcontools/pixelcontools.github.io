@@ -40,7 +40,7 @@ function formatNumber(n: number): string {
 }
 
 const GeoPixelsPaletteModal: React.FC<GeoPixelsPaletteModalProps> = ({ isOpen, onClose, onAddColors }) => {
-  const [userId, setUserId] = useState<string>('');
+  const [userId, setUserId] = useState<string>(() => localStorage.getItem('geopixels_last_user_id') ?? '');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -153,7 +153,7 @@ const GeoPixelsPaletteModal: React.FC<GeoPixelsPaletteModalProps> = ({ isOpen, o
                 type="text"
                 inputMode="numeric"
                 value={userId}
-                onChange={(e) => setUserId(e.target.value)}
+                onChange={(e) => { setUserId(e.target.value); localStorage.setItem('geopixels_last_user_id', e.target.value); }}
                 onKeyDown={handleKeyDown}
                 placeholder="3228"
                 className="flex-1 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:outline-none"

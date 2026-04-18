@@ -28,6 +28,17 @@ const WPLACE_FREE_PALETTE = [
   "#000000", "#3C3C3C", "#787878", "#D2D2D2", "#FFFFFF", "#600018", "#ED1C24", "#FF7F27", "#F6AA09", "#F9DD3B", "#FFFABC", "#0EB968", "#13E67B", "#87FF5E", "#0C816E", "#10AEA6", "#13E1BE", "#60F7F2", "#28509E", "#4093E4", "#6B50F6", "#99B1FB", "#780C99", "#AA38B9", "#E09FF9", "#CB007A", "#EC1F80", "#F38DA9", "#684634", "#95682A", "#F8B277"
 ];
 
+const WIN95_256_PALETTE = [
+  "#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#C0C0C0", "#C0DCC0", "#A6CAF0", "#2A3FAA", "#2A3FFF", "#2A5F00", "#2A5F55", "#2A5FAA", "#2A5FFF", "#2A7F00", "#2A7F55", "#2A7FAA", "#2A7FFF", "#2A9F00", "#2A9F55", "#2A9FAA", "#2A9FFF", "#2ABF00", "#2ABF55", "#2ABFAA", "#2ABFFF", "#2ADF00", "#2ADF55", "#2ADFAA", "#2ADFFF", "#2AFF00", "#2AFF55", "#2AFFAA", "#2AFFFF", "#550000", "#550055", "#5500AA", "#5500FF", "#551F00", "#551F55", "#551FAA", "#551FFF", "#553F00", "#553F55", "#553FAA", "#553FFF", "#555F00", "#555F55", "#555FAA", "#555FFF", "#557F00", "#557F55", "#557FAA", "#557FFF", "#559F00", "#559F55", "#559FAA", "#559FFF", "#55BF00", "#55BF55", "#55BFAA", "#55BFFF", "#55DF00", "#55DF55", "#55DFAA", "#55DFFF", "#55FF00", "#55FF55", "#55FFAA", "#55FFFF", "#7F0000", "#7F0055", "#7F00AA", "#7F00FF", "#7F1F00", "#7F1F55", "#7F1FAA", "#7F1FFF", "#7F3F00", "#7F3F55", "#7F3FAA", "#7F3FFF", "#7F5F00", "#7F5F55", "#7F5FAA", "#7F5FFF", "#7F7F00", "#7F7F55", "#7F7FAA", "#7F7FFF", "#7F9F00", "#7F9F55", "#7F9FAA", "#7F9FFF", "#7FBF00", "#7FBF55", "#7FBFAA", "#7FBFFF", "#7FDF00", "#7FDF55", "#7FDFAA", "#7FDFFF", "#7FFF00", "#7FFF55", "#7FFFAA", "#7FFFFF", "#AA0000", "#AA0055", "#AA00AA", "#AA00FF", "#AA1F00", "#AA1F55", "#AA1FAA", "#AA1FFF", "#AA3F00", "#AA3F55", "#AA3FAA", "#AA3FFF", "#AA5F00", "#AA5F55", "#AA5FAA", "#AA5FFF", "#AA7F00", "#AA7F55", "#AA7FAA", "#AA7FFF", "#AA9F00", "#AA9F55", "#AA9FAA", "#AA9FFF", "#AABF00", "#AABF55", "#AABFAA", "#AABFFF", "#AADF00", "#AADF55", "#AADFAA", "#AADFFF", "#AAFF00", "#AAFF55", "#AAFFAA", "#AAFFFF", "#D40000", "#D40055", "#D400AA", "#D400FF", "#D41F00", "#D41F55", "#D41FAA", "#D41FFF", "#D43F00", "#D43F55", "#D43FAA", "#D43FFF", "#D45F00", "#D45F55", "#D45FAA", "#D45FFF", "#D47F00", "#D47F55", "#D47FAA", "#D47FFF", "#D49F00", "#D49F55", "#D49FAA", "#D49FFF", "#D4BF00", "#D4BF55", "#D4BFAA", "#D4BFFF", "#D4DF00", "#D4DF55", "#D4DFAA", "#D4DFFF", "#D4FF00", "#D4FF55", "#D4FFAA", "#D4FFFF", "#FF0055", "#FF00AA", "#FF1F00", "#FF1F55", "#FF1FAA", "#FF1FFF", "#FF3F00", "#FF3F55", "#FF3FAA", "#FF3FFF", "#FF5F00", "#FF5F55", "#FF5FAA", "#FF5FFF", "#FF7F00", "#FF7F55", "#FF7FAA", "#FF7FFF", "#FF9F00", "#FF9F55", "#FF9FAA", "#FF9FFF", "#FFBF00", "#FFBF55", "#FFBFAA", "#FFBFFF", "#FFDF00", "#FFDF55", "#FFDFAA", "#FFDFFF", "#FFFF55", "#FFFFAA", "#CCCCFF", "#FFCCFF", "#33FFFF", "#66FFFF", "#99FFFF", "#CCFFFF", "#007F00", "#007F55", "#007FAA", "#007FFF", "#009F00", "#009F55", "#009FAA", "#009FFF", "#00BF00", "#00BF55", "#00BFAA", "#00BFFF", "#00DF00", "#00DF55", "#00DFAA", "#00DFFF", "#00FF55", "#00FFAA", "#2A0000", "#2A0055", "#2A00AA", "#2A00FF", "#2A1F00", "#2A1F55", "#2A1FAA", "#2A1FFF", "#2A3F00", "#2A3F55", "#FFFBF0", "#A0A0A4", "#808080", "#FF0000", "#00FF00", "#FFFF00", "#0000FF", "#FF00FF", "#00FFFF", "#FFFFFF"
+];
+
+const PRESET_PALETTES = [
+  { label: 'Geopixels Base', palette: GEOPIXELS_PALETTE },
+  { label: 'WPlace Free', palette: WPLACE_FREE_PALETTE },
+  { label: 'WPlace All', palette: WPLACE_PALETTE },
+  { label: 'Win95 256-color', palette: WIN95_256_PALETTE },
+];
+
 const COLOR_MATCH_ALGORITHMS = [
   { value: 'oklab', label: 'OKLab (perceptual)', desc: 'Modern perceptual — best all-round accuracy' },
   { value: 'ciede2000', label: 'CIEDE2000', desc: 'Gold standard — great for skin tones and gradients' },
@@ -71,8 +82,10 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const [ditherStrength, setDitherStrength] = useState<number>(100);
   const [preprocessingMethod, setPreprocessingMethod] = useState<'none' | 'bilateral' | 'kuwahara' | 'median' | 'edge-detect'>('none');
   const [preprocessingStrength, setPreprocessingStrength] = useState<number>(50);
-  const [paletteMode, setPaletteMode] = useState<'geopixels' | 'wplace' | 'wplace-free' | 'custom' | 'geopixels+custom' | 'none'>('geopixels');
+  const [paletteMode, setPaletteMode] = useState<'geopixels' | 'wplace' | 'wplace-free' | 'custom' | 'geopixels+custom' | 'preset' | 'none'>('preset');
   const [customPaletteInput, setCustomPaletteInput] = useState<string>('');
+  const [selectedPreset, setSelectedPreset] = useState<string>('Geopixels Base');
+  const [includeGeopixelsBase, setIncludeGeopixelsBase] = useState<boolean>(true);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [resultDimensions, setResultDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -267,7 +280,13 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
         if (s.ditherStrength != null) setDitherStrength(s.ditherStrength);
         if (s.preprocessingMethod) setPreprocessingMethod(s.preprocessingMethod);
         if (s.preprocessingStrength != null) setPreprocessingStrength(s.preprocessingStrength);
-        if (s.paletteMode) setPaletteMode(s.paletteMode);
+        if (s.paletteMode) {
+          // Migrate old geopixels+custom to custom
+          setPaletteMode(s.paletteMode === 'geopixels+custom' ? 'custom' : s.paletteMode);
+        }
+        if (s.includeGeopixelsBase != null) setIncludeGeopixelsBase(s.includeGeopixelsBase);
+        else if (s.paletteMode === 'geopixels+custom') setIncludeGeopixelsBase(true);
+        if (s.selectedPreset != null) setSelectedPreset(s.selectedPreset);
         if (s.useKmeans != null) setUseKmeans(s.useKmeans);
         if (s.kmeansColors != null) setKmeansColors(s.kmeansColors);
         if (s.brightness != null) setBrightness(s.brightness);
@@ -303,14 +322,14 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     colorMatchAlgorithm, preserveDetailThreshold,
     filterTrivialColors, trivialThreshold, trivialThresholdMode,
     pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm,
-    autoUpdate, isPaletteVisualizationOpen, isExtraFeaturesOpen,
+    autoUpdate, isPaletteVisualizationOpen, isExtraFeaturesOpen, includeGeopixelsBase, selectedPreset,
   }), [targetHeight, resamplingMethod, ditherMethod, ditherStrength,
     preprocessingMethod, preprocessingStrength, paletteMode,
     useKmeans, kmeansColors, brightness, contrast, saturation,
     colorMatchAlgorithm, preserveDetailThreshold,
     filterTrivialColors, trivialThreshold, trivialThresholdMode,
     pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm,
-    autoUpdate, isPaletteVisualizationOpen, isExtraFeaturesOpen]);
+    autoUpdate, isPaletteVisualizationOpen, isExtraFeaturesOpen, includeGeopixelsBase, selectedPreset]);
 
   useEffect(() => {
     if (!settingsLoaded) return;
@@ -371,20 +390,31 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
       }).filter((c): c is string => c !== null);
     }
 
-    if (paletteMode === 'custom') return customColors;
+    if (paletteMode === 'preset') {
+      const found = PRESET_PALETTES.find(p => p.label === selectedPreset);
+      return found ? found.palette : [];
+    }
+    if (paletteMode === 'custom') {
+      if (includeGeopixelsBase) {
+        const merged = [...GEOPIXELS_PALETTE];
+        for (const color of customColors) {
+          if (!merged.includes(color.toUpperCase())) merged.push(color.toUpperCase());
+        }
+        return merged;
+      }
+      return customColors;
+    }
+    // Backward compat: old saved settings with geopixels+custom
     if (paletteMode === 'geopixels+custom') {
-      // Merge geopixels base with custom, removing duplicates
       const merged = [...GEOPIXELS_PALETTE];
       for (const color of customColors) {
-        if (!merged.includes(color.toUpperCase())) {
-          merged.push(color.toUpperCase());
-        }
+        if (!merged.includes(color.toUpperCase())) merged.push(color.toUpperCase());
       }
       return merged;
     }
 
     return [];
-  }, [paletteMode, customPaletteInput]);
+  }, [paletteMode, customPaletteInput, selectedPreset, includeGeopixelsBase]);
 
   // Handle K-Means state when palette mode changes
   useEffect(() => {
@@ -807,14 +837,14 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     colorMatchAlgorithm, preserveDetailThreshold,
     filterTrivialColors, trivialThreshold, trivialThresholdMode,
     pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm,
-    autoUpdate, customPaletteInput,
+    autoUpdate, customPaletteInput, selectedPreset, includeGeopixelsBase,
   }), [targetHeight, resamplingMethod, ditherMethod, ditherStrength,
     preprocessingMethod, preprocessingStrength, paletteMode,
     useKmeans, kmeansColors, brightness, contrast, saturation,
     colorMatchAlgorithm, preserveDetailThreshold,
     filterTrivialColors, trivialThreshold, trivialThresholdMode,
     pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm,
-    autoUpdate, customPaletteInput]);
+    autoUpdate, customPaletteInput, selectedPreset, includeGeopixelsBase]);
 
   const savePreset = useCallback((name: string) => {
     if (!name.trim()) return;
@@ -849,6 +879,10 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     if (settings.edgeDetectAlgorithm) setEdgeDetectAlgorithm(settings.edgeDetectAlgorithm);
     if (settings.autoUpdate != null) setAutoUpdate(settings.autoUpdate);
     if (settings.customPaletteInput != null) setCustomPaletteInput(settings.customPaletteInput);
+    if (settings.selectedPreset != null) setSelectedPreset(settings.selectedPreset);
+    if (settings.includeGeopixelsBase != null) setIncludeGeopixelsBase(settings.includeGeopixelsBase);
+    // Migrate old geopixels+custom profiles
+    if (settings.paletteMode === 'geopixels+custom') { setPaletteMode('custom'); setIncludeGeopixelsBase(true); }
     debounceTimeRef.current = 100;
     setIsPresetsModalOpen(false);
   }, []);
@@ -938,10 +972,10 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     } else {
       setCustomPaletteInput(`${existing}, ${newColors}`);
     }
-    // Auto-switch to custom or geopixels+custom if not already
+    // Auto-switch to custom if not already
     if (paletteMode !== 'custom' && paletteMode !== 'geopixels+custom') {
       debounceTimeRef.current = 100;
-      setPaletteMode('geopixels+custom');
+      setPaletteMode('custom');
     }
   };
 
@@ -955,14 +989,14 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     } else {
       setCustomPaletteInput(`${existing}, ${newColors}`);
     }
-    // Auto-switch to geopixels+custom if not already on custom/geopixels+custom
+    // Auto-switch to custom if not already
     if (paletteMode !== 'custom' && paletteMode !== 'geopixels+custom') {
       debounceTimeRef.current = 100;
-      setPaletteMode('geopixels+custom');
+      setPaletteMode('custom');
     }
   };
 
-  // K-Means: Send generated palette colors to Geopixels+Custom text field
+  // K-Means: Send generated palette colors to Custom text field
   const handleSendKmeansToCustom = () => {
     if (generatedPalette.length === 0) return;
     const newColors = generatedPalette.join(', ');
@@ -972,9 +1006,9 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     } else {
       setCustomPaletteInput(`${existing}, ${newColors}`);
     }
-    // Switch to Geopixels + Custom mode
+    // Switch to Custom mode
     debounceTimeRef.current = 100;
-    setPaletteMode('geopixels+custom');
+    setPaletteMode('custom');
   };
 
   return (
@@ -1129,7 +1163,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-gray-400 uppercase">Palette</label>
-                {paletteMode === 'geopixels+custom' && (
+                {(paletteMode === 'custom' && includeGeopixelsBase) && (
                   <div className="group relative">
                     <span className="cursor-help text-xs text-blue-400">Fun Fact?</span>
                     <div className="absolute bottom-full right-0 mb-2 w-64 p-2 bg-gray-900 border border-gray-600 rounded shadow-xl text-xs text-gray-300 hidden group-hover:block z-50">
@@ -1144,28 +1178,10 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                   <input
                     type="radio"
                     name="palette"
-                    checked={paletteMode === 'geopixels'}
-                    onChange={() => { debounceTimeRef.current = 100; setPaletteMode('geopixels'); }}
+                    checked={paletteMode === 'preset'}
+                    onChange={() => { debounceTimeRef.current = 100; setPaletteMode('preset'); }}
                   />
-                  <span className="text-sm">Geopixels Base</span>
-                </label>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="palette"
-                    checked={paletteMode === 'wplace-free'}
-                    onChange={() => { debounceTimeRef.current = 100; setPaletteMode('wplace-free'); }}
-                  />
-                  <span className="text-sm">WPlace Free <span className="text-gray-500 text-xs">(31 colors)</span></span>
-                </label>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="palette"
-                    checked={paletteMode === 'wplace'}
-                    onChange={() => { debounceTimeRef.current = 100; setPaletteMode('wplace'); }}
-                  />
-                  <span className="text-sm">WPlace All <span className="text-gray-500 text-xs">(63 colors)</span></span>
+                  <span className="text-sm">Presets</span>
                 </label>
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
@@ -1180,15 +1196,6 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                   <input
                     type="radio"
                     name="palette"
-                    checked={paletteMode === 'geopixels+custom'}
-                    onChange={() => { debounceTimeRef.current = 100; setPaletteMode('geopixels+custom'); }}
-                  />
-                  <span className="text-sm">Geopixels Base + Custom</span>
-                </label>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="palette"
                     checked={paletteMode === 'none'}
                     onChange={() => { debounceTimeRef.current = 100; setPaletteMode('none'); }}
                   />
@@ -1196,7 +1203,21 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                 </label>
               </div>
 
-              {(paletteMode === 'custom' || paletteMode === 'geopixels+custom') && (
+              {paletteMode === 'preset' && (
+                <div className="space-y-1">
+                  <select
+                    value={selectedPreset}
+                    onChange={(e) => { setSelectedPreset(e.target.value); debounceTimeRef.current = 100; }}
+                    className="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-xs text-green-300 cursor-pointer"
+                  >
+                    {PRESET_PALETTES.map(p => (
+                      <option key={p.label} value={p.label}>{p.label} ({p.palette.length} colors)</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {paletteMode === 'custom' && (
                 <div className="space-y-2">
                   <textarea
                     value={customPaletteInput}
@@ -1204,6 +1225,15 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                     placeholder="#FFFFFF, #000000 or 16777215, 0"
                     className="w-full h-24 bg-gray-800 border border-gray-600 rounded p-2 text-xs font-mono"
                   />
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeGeopixelsBase}
+                      onChange={(e) => { setIncludeGeopixelsBase(e.target.checked); debounceTimeRef.current = 100; }}
+                      className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                    />
+                    <span className="text-xs text-gray-400">Include Geopixels Base Colors</span>
+                  </label>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setIsEyedropperOpen(true)}
@@ -1533,71 +1563,71 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                       </div>
                     )}
 
-                    {/* Suggest Colors — only for custom palette modes */}
-                    {(paletteMode === 'custom' || paletteMode === 'geopixels+custom') && (
-                      <div className="space-y-2 border-t border-gray-700 pt-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <label className="text-xs font-semibold text-gray-400 uppercase whitespace-nowrap">Suggest Colors</label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              min="1"
-                              max="32"
-                              value={suggestCount}
-                              onChange={(e) => setSuggestCount(Math.max(1, Math.min(32, Number(e.target.value))))}
-                              className="w-12 bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-xs text-center"
-                              title="Number of colors to suggest"
-                            />
-                            <button
-                              onClick={handleSuggestColors}
-                              disabled={isSuggesting}
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-xs rounded transition-colors"
-                            >
-                              {isSuggesting ? '...' : 'Go'}
-                            </button>
-                          </div>
-                        </div>
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={preferDistinctColors}
-                            onChange={(e) => setPreferDistinctColors(e.target.checked)}
-                            className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
-                            title="Prioritize colors that are distinct from each other"
-                          />
-                          <span className="text-xs text-gray-400">Prefer distinct color suggestions</span>
-                        </label>
-
-                        {suggestedColors.length > 0 && (
-                          <div className="space-y-2">
-                            <div className="flex flex-wrap gap-1 bg-gray-900 p-2 rounded border border-gray-700">
-                              {suggestedColors.map((color, idx) => (
-                                <div
-                                  key={idx}
-                                  className="w-8 h-8 rounded border border-gray-500 cursor-pointer hover:border-white"
-                                  style={{ backgroundColor: color }}
-                                  title={`${color} - Click to copy`}
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(color);
-                                  }}
-                                />
-                              ))}
-                            </div>
-                            <button
-                              onClick={handleAddSuggestedToCustom}
-                              className="w-full px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors"
-                            >
-                              Add to Custom Palette
-                            </button>
-                          </div>
-                        )}
-
-                        <p className="text-xs text-gray-500">Analyzes the image to find dominant colors missing from your palette.</p>
-                      </div>
-                    )}
+                    {/* Suggest Colors moved below Palette Preview */}
                   </div>
                 )}
               </div>
+
+              {/* Suggest Colors — always visible for custom palette mode */}
+              {paletteMode === 'custom' && (
+                <div className="space-y-2 border-t border-gray-700 pt-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs font-semibold text-gray-400 uppercase whitespace-nowrap">Suggest Colors</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        max="32"
+                        value={suggestCount}
+                        onChange={(e) => setSuggestCount(Math.max(1, Math.min(32, Number(e.target.value))))}
+                        className="w-12 bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-xs text-center"
+                        title="Number of colors to suggest"
+                      />
+                      <button
+                        onClick={handleSuggestColors}
+                        disabled={isSuggesting}
+                        className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-xs rounded transition-colors"
+                      >
+                        {isSuggesting ? '...' : 'Go'}
+                      </button>
+                    </div>
+                  </div>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={preferDistinctColors}
+                      onChange={(e) => setPreferDistinctColors(e.target.checked)}
+                      className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                      title="Prioritize colors that are distinct from each other"
+                    />
+                    <span className="text-xs text-gray-400">Prefer distinct color suggestions</span>
+                  </label>
+
+                  {suggestedColors.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-1 bg-gray-900 p-2 rounded border border-gray-700">
+                        {suggestedColors.map((color, idx) => (
+                          <div
+                            key={idx}
+                            className="w-8 h-8 rounded border border-gray-500 cursor-pointer hover:border-white"
+                            style={{ backgroundColor: color }}
+                            title={`${color} - Click to copy`}
+                            onClick={() => { navigator.clipboard.writeText(color); }}
+                          />
+                        ))}
+                      </div>
+                      <button
+                        onClick={handleAddSuggestedToCustom}
+                        className="w-full px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors"
+                      >
+                        Add to Custom Palette
+                      </button>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-500">Analyzes the image to find dominant colors missing from your palette.</p>
+                </div>
+              )}
             </div>
 
             {/* Dithering */}
@@ -1669,7 +1699,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                       className="w-full mt-2 px-3 py-1.5 bg-teal-700 hover:bg-teal-600 text-white text-xs font-medium rounded transition-colors"
                       title="Send K-Means palette to Geopixels Base + Custom"
                     >
-                      Send Colors to Geopixels Custom Palette
+                      Send Colors to Custom Palette
                     </button>
                   )}
                 </div>
@@ -1677,7 +1707,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
             </div>
 
             {/* Color Sampling Mask */}
-            {(paletteMode === 'none' || paletteMode === 'custom' || paletteMode === 'geopixels+custom') && (
+            {(paletteMode === 'none' || paletteMode === 'custom') && (
               <div className="space-y-2">
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
@@ -1961,7 +1991,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
               <button onClick={handleFitToScreen} className="bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 text-xs" title="Fit to screen">Fit</button>
               <button onClick={handleZoomReset} className="bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 text-xs" title="Reset zoom">Reset</button>
               <button onClick={handleResetSettings} className="bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 text-xs text-yellow-400" title="Reset all pixelator settings to defaults">⟳ Settings</button>
-              <button onClick={() => setIsPresetsModalOpen(true)} className="bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 text-xs text-blue-400" title="Save/load pixelation presets">Presets...</button>
+              <button onClick={() => setIsPresetsModalOpen(true)} className="bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 text-xs text-blue-400" title="Save/load pixelation profiles">Profiles...</button>
             </div>
           </div>
 
