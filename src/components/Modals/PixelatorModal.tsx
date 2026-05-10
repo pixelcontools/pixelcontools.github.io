@@ -55,6 +55,9 @@ const DITHER_ALGORITHMS = [
   { value: 'sierra-2', label: 'Sierra-2' },
   { value: 'sierra-lite', label: 'Sierra Lite' },
   { value: 'atkinson', label: 'Atkinson' },
+  { value: 'jarvis', label: 'Jarvis-Judice-Ninke' },
+  { value: 'shiau-fan', label: 'Shiau-Fan' },
+  { value: 'blue-noise', label: 'Blue Noise (IGN)' },
   { value: 'bayer-4x4', label: 'Bayer 4x4' },
   { value: 'bayer-8x8', label: 'Bayer 8x8' },
   { value: 'halftone-dot', label: 'Halftone Dot' },
@@ -76,12 +79,19 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
 
   // State
   const [targetHeight, setTargetHeight] = useState<number>(128);
+  const [targetWidth, setTargetWidth] = useState<number>(128);
   const [originalHeight, setOriginalHeight] = useState<number>(128);
+  const [originalWidth, setOriginalWidth] = useState<number>(128);
+  const [aspectRatioLocked, setAspectRatioLocked] = useState<boolean>(true);
+  const [displayHeight, setDisplayHeight] = useState(String(128));
+  const [displayWidth, setDisplayWidth] = useState(String(128));
   const [resamplingMethod, setResamplingMethod] = useState<'nearest' | 'bilinear' | 'lanczos' | 'pixeloe-nearest' | 'pixeloe-contrast' | 'pixeloe-k-centroid'>('bilinear');
   const [ditherMethod, setDitherMethod] = useState<string>('none');
   const [ditherStrength, setDitherStrength] = useState<number>(100);
-  const [preprocessingMethod, setPreprocessingMethod] = useState<'none' | 'bilateral' | 'kuwahara' | 'median' | 'edge-detect'>('none');
-  const [preprocessingStrength, setPreprocessingStrength] = useState<number>(50);
+  const [preprocessBilateral, setPreprocessBilateral] = useState<boolean>(false);
+  const [preprocessBilateralStrength, setPreprocessBilateralStrength] = useState<number>(50);
+  const [preprocessEdgeDetect, setPreprocessEdgeDetect] = useState<boolean>(false);
+  const [bcsEnabled, setBcsEnabled] = useState<boolean>(false);
   const [paletteMode, setPaletteMode] = useState<'geopixels' | 'wplace' | 'wplace-free' | 'custom' | 'geopixels+custom' | 'preset' | 'none'>('preset');
   const [customPaletteInput, setCustomPaletteInput] = useState<string>('');
   const [selectedPreset, setSelectedPreset] = useState<string>('Geopixels Base');
@@ -91,8 +101,8 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [zoom, setZoom] = useState<number>(1);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
-  const [displayHeight, setDisplayHeight] = useState(String(targetHeight));
   const [isPaletteVisualizationOpen, setIsPaletteVisualizationOpen] = useState(true);
+  const [isPaletteOpen, setIsPaletteOpen] = useState<boolean>(true);
   const [useKmeans, setUseKmeans] = useState<boolean>(false);
   const [kmeansColors, setKmeansColors] = useState<number>(16);
   const [suggestedColors, setSuggestedColors] = useState<string[]>([]);
@@ -120,16 +130,29 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   const [brightness, setBrightness] = useState<number>(0);
   const [contrast, setContrast] = useState<number>(0);
   const [saturation, setSaturation] = useState<number>(0);
+  const [vibrance, setVibrance] = useState<number>(0);
   const [colorMatchAlgorithm, setColorMatchAlgorithm] = useState<string>('oklab');
   const [preserveDetailThreshold, setPreserveDetailThreshold] = useState<number>(0);
 
   // PixelOE settings
   const [pixeloeThickness, setPixeloeThickness] = useState<number>(2);
   const [pixeloePatchSize, setPixeloePatchSize] = useState<number>(16);
+  const [outlineConsistency, setOutlineConsistency] = useState<boolean>(false);
+  const [outlineColors, setOutlineColors] = useState<number>(2);
+  const [clusterCleanup, setClusterCleanup] = useState<boolean>(false);
+  const [clusterMinSize, setClusterMinSize] = useState<number>(4);
 
   // Edge detection settings
   const [edgeDetectBlur, setEdgeDetectBlur] = useState<number>(0);
   const [edgeDetectAlgorithm, setEdgeDetectAlgorithm] = useState<'sobel' | 'scharr' | 'laplacian'>('sobel');
+
+  // Sharpening (pre-processing)
+  const [preprocessSharpening, setPreprocessSharpening] = useState<boolean>(false);
+  const [preprocessSharpeningStrength, setPreprocessSharpeningStrength] = useState<number>(50);
+
+  // Dither quality flags (apply to error-diffusion kernels only)
+  const [serpentineDither, setSerpentineDither] = useState<boolean>(true);
+  const [gammaCorrectDither, setGammaCorrectDither] = useState<boolean>(false);
 
   // Context menu state for palette swatches
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; color: string; editing?: boolean; editValue?: string } | null>(null);
@@ -255,10 +278,9 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     };
   }, [createWorker]);
 
-  // Sync display height when targetHeight changes
-  useEffect(() => {
-    setDisplayHeight(String(targetHeight));
-  }, [targetHeight]);
+  // Sync display strings when targets change
+  useEffect(() => { setDisplayHeight(String(targetHeight)); }, [targetHeight]);
+  useEffect(() => { setDisplayWidth(String(targetWidth)); }, [targetWidth]);
 
   // Load cached custom palette on mount
   useEffect(() => {
@@ -278,8 +300,10 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
         if (s.resamplingMethod) setResamplingMethod(s.resamplingMethod);
         if (s.ditherMethod) setDitherMethod(s.ditherMethod);
         if (s.ditherStrength != null) setDitherStrength(s.ditherStrength);
-        if (s.preprocessingMethod) setPreprocessingMethod(s.preprocessingMethod);
-        if (s.preprocessingStrength != null) setPreprocessingStrength(s.preprocessingStrength);
+        if (s.preprocessBilateral != null) setPreprocessBilateral(s.preprocessBilateral);
+        if (s.preprocessBilateralStrength != null) setPreprocessBilateralStrength(s.preprocessBilateralStrength);
+        if (s.preprocessEdgeDetect != null) setPreprocessEdgeDetect(s.preprocessEdgeDetect);
+        if (s.bcsEnabled != null) setBcsEnabled(s.bcsEnabled);
         if (s.paletteMode) {
           // Migrate old geopixels+custom to custom
           setPaletteMode(s.paletteMode === 'geopixels+custom' ? 'custom' : s.paletteMode);
@@ -292,6 +316,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
         if (s.brightness != null) setBrightness(s.brightness);
         if (s.contrast != null) setContrast(s.contrast);
         if (s.saturation != null) setSaturation(s.saturation);
+        if (s.vibrance != null) setVibrance(s.vibrance);
         if (s.colorMatchAlgorithm) setColorMatchAlgorithm(s.colorMatchAlgorithm);
         if (s.preserveDetailThreshold != null) setPreserveDetailThreshold(s.preserveDetailThreshold);
         if (s.filterTrivialColors != null) setFilterTrivialColors(s.filterTrivialColors);
@@ -299,8 +324,16 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
         if (s.trivialThresholdMode) setTrivialThresholdMode(s.trivialThresholdMode);
         if (s.pixeloeThickness != null) setPixeloeThickness(s.pixeloeThickness);
         if (s.pixeloePatchSize != null) setPixeloePatchSize(s.pixeloePatchSize);
+        if (s.outlineConsistency != null) setOutlineConsistency(s.outlineConsistency);
+        if (s.outlineColors != null) setOutlineColors(s.outlineColors);
+        if (s.clusterCleanup != null) setClusterCleanup(s.clusterCleanup);
+        if (s.clusterMinSize != null) setClusterMinSize(s.clusterMinSize);
+        if (s.preprocessSharpening != null) setPreprocessSharpening(s.preprocessSharpening);
+        if (s.preprocessSharpeningStrength != null) setPreprocessSharpeningStrength(s.preprocessSharpeningStrength);
         if (s.edgeDetectBlur != null) setEdgeDetectBlur(s.edgeDetectBlur);
         if (s.edgeDetectAlgorithm) setEdgeDetectAlgorithm(s.edgeDetectAlgorithm);
+        if (s.serpentineDither != null) setSerpentineDither(s.serpentineDither);
+        if (s.gammaCorrectDither != null) setGammaCorrectDither(s.gammaCorrectDither);
         if (s.autoUpdate != null) setAutoUpdate(s.autoUpdate);
         if (s.isPaletteVisualizationOpen != null) setIsPaletteVisualizationOpen(s.isPaletteVisualizationOpen);
         if (s.isExtraFeaturesOpen != null) setIsExtraFeaturesOpen(s.isExtraFeaturesOpen);
@@ -317,18 +350,22 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   // Save settings to localStorage whenever they change
   const settingsToSave = useMemo(() => ({
     targetHeight, resamplingMethod, ditherMethod, ditherStrength,
-    preprocessingMethod, preprocessingStrength, paletteMode,
-    useKmeans, kmeansColors, brightness, contrast, saturation,
+    preprocessBilateral, preprocessBilateralStrength, preprocessEdgeDetect, preprocessSharpening, preprocessSharpeningStrength, bcsEnabled, paletteMode,
+    useKmeans, kmeansColors, brightness, contrast, saturation, vibrance,
     colorMatchAlgorithm, preserveDetailThreshold,
     filterTrivialColors, trivialThreshold, trivialThresholdMode,
     pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm,
+    serpentineDither, gammaCorrectDither,
+    outlineConsistency, outlineColors, clusterCleanup, clusterMinSize,
     autoUpdate, isPaletteVisualizationOpen, isExtraFeaturesOpen, includeGeopixelsBase, selectedPreset,
   }), [targetHeight, resamplingMethod, ditherMethod, ditherStrength,
-    preprocessingMethod, preprocessingStrength, paletteMode,
-    useKmeans, kmeansColors, brightness, contrast, saturation,
+    preprocessBilateral, preprocessBilateralStrength, preprocessEdgeDetect, preprocessSharpening, preprocessSharpeningStrength, bcsEnabled, paletteMode,
+    useKmeans, kmeansColors, brightness, contrast, saturation, vibrance,
     colorMatchAlgorithm, preserveDetailThreshold,
     filterTrivialColors, trivialThreshold, trivialThresholdMode,
     pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm,
+    serpentineDither, gammaCorrectDither,
+    outlineConsistency, outlineColors, clusterCleanup, clusterMinSize,
     autoUpdate, isPaletteVisualizationOpen, isExtraFeaturesOpen, includeGeopixelsBase, selectedPreset]);
 
   useEffect(() => {
@@ -336,12 +373,20 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     localStorage.setItem('pixelator_settings', JSON.stringify(settingsToSave));
   }, [settingsToSave, settingsLoaded]);
 
-  // Initialize original height from layer dimensions
+  // Initialize original dimensions from layer
   useEffect(() => {
     if (isOpen && layer.imageData) {
       const img = new Image();
       img.onload = () => {
         setOriginalHeight(img.height);
+        setOriginalWidth(img.width);
+        // Only reset target dims on first open (don't clobber persisted settings)
+        setTargetHeight(h => {
+          const newW = Math.round(h * img.width / img.height);
+          setTargetWidth(newW);
+          setDisplayWidth(String(newW));
+          return h;
+        });
       };
       img.src = layer.imageData;
     }
@@ -471,14 +516,13 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
 
       const palette = getPalette();
 
-      // Calculate target width based on aspect ratio
-      const aspectRatio = img.width / img.height;
-      const targetWidth = Math.round(targetHeight * aspectRatio);
+      // Use explicitly set target dimensions (aspect ratio maintained by UI handlers)
+      const tw = targetWidth > 0 ? targetWidth : Math.round(targetHeight * img.width / img.height);
 
       workerRef.current?.postMessage({
         imageData,
         settings: {
-          targetWidth,
+          targetWidth: tw,
           targetHeight,
           ditherMethod,
           ditherStrength,
@@ -486,20 +530,30 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           resamplingMethod,
           useKmeans,
           kmeansColors,
-          brightness,
-          contrast,
-          saturation,
-          preprocessingMethod,
-          preprocessingStrength,
+          brightness: bcsEnabled ? brightness : 0,
+          contrast: bcsEnabled ? contrast : 0,
+          saturation: bcsEnabled ? saturation : 0,
+          vibrance: bcsEnabled ? vibrance : 0,
+          preprocessSharpening,
+          preprocessSharpeningStrength,
+          preprocessBilateral,
+          preprocessBilateralStrength,
+          preprocessEdgeDetect,
           filterTrivialColors,
           trivialThreshold,
           trivialThresholdMode,
           colorMatchAlgorithm,
-          preserveDetailThreshold,
+          preserveDetailThreshold: bcsEnabled ? preserveDetailThreshold : 0,
           pixeloeThickness,
           pixeloePatchSize,
           edgeDetectBlur,
           edgeDetectAlgorithm,
+          serpentineDither,
+          gammaCorrectDither,
+          outlineConsistency,
+          outlineColors,
+          clusterCleanup,
+          clusterMinSize,
           colorStats: [],
           samplingMask: samplingMaskEnabled && samplingMask ? Array.from(samplingMask) : null,
           samplingMaskWidth: samplingMaskDims?.w || 0,
@@ -509,7 +563,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     };
     img.src = layer.imageData;
 
-  }, [layer.imageData, targetHeight, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm, preserveDetailThreshold, pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm, createWorker, samplingMaskEnabled, samplingMask, samplingMaskDims]);
+  }, [layer.imageData, targetHeight, targetWidth, ditherMethod, ditherStrength, getPalette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, vibrance, bcsEnabled, preprocessSharpening, preprocessSharpeningStrength, preprocessBilateral, preprocessBilateralStrength, preprocessEdgeDetect, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm, preserveDetailThreshold, pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm, serpentineDither, gammaCorrectDither, outlineConsistency, outlineColors, clusterCleanup, clusterMinSize, createWorker, samplingMaskEnabled, samplingMask, samplingMaskDims]);
 
   // Debounced Effect
   useEffect(() => {
@@ -525,6 +579,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     isOpen,
     autoUpdate,
     targetHeight,
+    targetWidth,
     ditherMethod,
     ditherStrength,
     paletteMode,
@@ -535,8 +590,13 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     brightness,
     contrast,
     saturation,
-    preprocessingMethod,
-    preprocessingStrength,
+    vibrance,
+    bcsEnabled,
+    preprocessSharpening,
+    preprocessSharpeningStrength,
+    preprocessBilateral,
+    preprocessBilateralStrength,
+    preprocessEdgeDetect,
     filterTrivialColors,
     trivialThreshold,
     trivialThresholdMode,
@@ -546,6 +606,12 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     pixeloePatchSize,
     edgeDetectBlur,
     edgeDetectAlgorithm,
+    serpentineDither,
+    gammaCorrectDither,
+    outlineConsistency,
+    outlineColors,
+    clusterCleanup,
+    clusterMinSize,
     processImage
   ]);
 
@@ -585,9 +651,64 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     return Math.max(0.1, newZoom);
   }, []);
 
-  const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.5, 20));
-  const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.5, 0.5));
-  const handleZoomReset = () => setZoom(1);
+  // Zoom while preserving the current viewport center.
+  // Captures the image-space coordinate at the center of the visible scroll area,
+  // applies the new zoom, then restores scroll so that same image coord stays centered.
+  // Padding (20px around the image content) is accounted for.
+  const PREVIEW_PADDING = 20;
+  const zoomAtCenter = useCallback((updater: (prev: number) => number) => {
+    setZoom(prev => {
+      const next = updater(prev);
+      const c = previewContainerRef.current;
+      if (!c) return next;
+      const centerX = c.scrollLeft + c.clientWidth / 2;
+      const centerY = c.scrollTop + c.clientHeight / 2;
+      const imgX = (centerX - PREVIEW_PADDING) / prev;
+      const imgY = (centerY - PREVIEW_PADDING) / prev;
+      // Restore scroll after layout updates
+      requestAnimationFrame(() => {
+        if (!previewContainerRef.current) return;
+        const cc = previewContainerRef.current;
+        cc.scrollLeft = imgX * next + PREVIEW_PADDING - cc.clientWidth / 2;
+        cc.scrollTop = imgY * next + PREVIEW_PADDING - cc.clientHeight / 2;
+      });
+      return next;
+    });
+  }, []);
+
+  // Middle-click drag panning on the preview area, mirroring the main canvas behavior.
+  const previewPanRef = useRef<{ startX: number; startY: number; startScrollLeft: number; startScrollTop: number } | null>(null);
+  const handlePreviewMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Middle click only — left click stays on the compare slider, right click is reserved
+    if (e.button !== 1) return;
+    const c = previewContainerRef.current;
+    if (!c) return;
+    e.preventDefault();
+    previewPanRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startScrollLeft: c.scrollLeft,
+      startScrollTop: c.scrollTop,
+    };
+    const onMove = (ev: MouseEvent) => {
+      const p = previewPanRef.current;
+      const cc = previewContainerRef.current;
+      if (!p || !cc) return;
+      cc.scrollLeft = p.startScrollLeft - (ev.clientX - p.startX);
+      cc.scrollTop = p.startScrollTop - (ev.clientY - p.startY);
+    };
+    const onUp = () => {
+      previewPanRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
+
+  const handleZoomIn = () => zoomAtCenter(z => Math.min(z + 0.5, 20));
+  const handleZoomOut = () => zoomAtCenter(z => Math.max(z - 0.5, 0.5));
+  const handleZoomReset = () => zoomAtCenter(() => 1);
   const handleFitToScreen = useCallback(() => {
     if (!imageDimensions) return;
     setZoom(calculateFitZoom(imageDimensions.width, imageDimensions.height));
@@ -606,7 +727,10 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     }
   }, [imageDimensions, hasInitialFit, handleFitToScreen]);
 
-  const handleHeightReset = () => setTargetHeight(originalHeight);
+  const handleHeightReset = () => {
+    setTargetHeight(originalHeight);
+    setTargetWidth(originalWidth);
+  };
 
   const checkForSemiTransparentPixels = (imageData: ImageData): boolean => {
     const data = imageData.data;
@@ -802,14 +926,17 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     setResamplingMethod('bilinear');
     setDitherMethod('none');
     setDitherStrength(100);
-    setPreprocessingMethod('none');
-    setPreprocessingStrength(50);
+    setPreprocessBilateral(false);
+    setPreprocessBilateralStrength(50);
+    setPreprocessEdgeDetect(false);
+    setBcsEnabled(false);
     setPaletteMode('geopixels');
     setUseKmeans(false);
     setKmeansColors(16);
     setBrightness(0);
     setContrast(0);
     setSaturation(0);
+    setVibrance(0);
     setColorMatchAlgorithm('oklab');
     setPreserveDetailThreshold(0);
     setFilterTrivialColors(false);
@@ -818,11 +945,23 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     setTrivialThresholdMode('percent');
     setPixeloeThickness(2);
     setPixeloePatchSize(16);
+    setOutlineConsistency(false);
+    setOutlineColors(2);
+    setClusterCleanup(false);
+    setClusterMinSize(4);
+    setPreprocessBilateral(false);
+    setPreprocessBilateralStrength(50);
+    setPreprocessSharpening(false);
+    setPreprocessSharpeningStrength(50);
+    setPreprocessEdgeDetect(false);
+    setBcsEnabled(false);
     setEdgeDetectBlur(0);
     setEdgeDetectAlgorithm('sobel');
+    setSerpentineDither(true);
+    setGammaCorrectDither(false);
     setAutoUpdate(true);
     setIsPaletteVisualizationOpen(true);
-    setIsExtraFeaturesOpen(false);
+    setIsExtraFeaturesOpen(true);
     setSamplingMaskEnabled(false);
     setSamplingMask(null);
     setSamplingMaskDims(null);
@@ -832,18 +971,22 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
   // ─── Preset management ─────────────────────────────────────────────
   const getCurrentSettings = useCallback((): Record<string, any> => ({
     targetHeight, resamplingMethod, ditherMethod, ditherStrength,
-    preprocessingMethod, preprocessingStrength, paletteMode,
-    useKmeans, kmeansColors, brightness, contrast, saturation,
+    preprocessBilateral, preprocessBilateralStrength, preprocessEdgeDetect, preprocessSharpening, preprocessSharpeningStrength, bcsEnabled,
+    useKmeans, kmeansColors, brightness, contrast, saturation, vibrance,
     colorMatchAlgorithm, preserveDetailThreshold,
     filterTrivialColors, trivialThreshold, trivialThresholdMode,
     pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm,
+    serpentineDither, gammaCorrectDither,
+    outlineConsistency, outlineColors, clusterCleanup, clusterMinSize,
     autoUpdate, customPaletteInput, selectedPreset, includeGeopixelsBase,
   }), [targetHeight, resamplingMethod, ditherMethod, ditherStrength,
-    preprocessingMethod, preprocessingStrength, paletteMode,
-    useKmeans, kmeansColors, brightness, contrast, saturation,
+    preprocessBilateral, preprocessBilateralStrength, preprocessEdgeDetect, preprocessSharpening, preprocessSharpeningStrength, bcsEnabled,
+    useKmeans, kmeansColors, brightness, contrast, saturation, vibrance,
     colorMatchAlgorithm, preserveDetailThreshold,
     filterTrivialColors, trivialThreshold, trivialThresholdMode,
     pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm,
+    serpentineDither, gammaCorrectDither,
+    outlineConsistency, outlineColors, clusterCleanup, clusterMinSize,
     autoUpdate, customPaletteInput, selectedPreset, includeGeopixelsBase]);
 
   const savePreset = useCallback((name: string) => {
@@ -860,23 +1003,36 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
     if (settings.resamplingMethod) setResamplingMethod(settings.resamplingMethod);
     if (settings.ditherMethod) setDitherMethod(settings.ditherMethod);
     if (settings.ditherStrength != null) setDitherStrength(settings.ditherStrength);
-    if (settings.preprocessingMethod) setPreprocessingMethod(settings.preprocessingMethod);
-    if (settings.preprocessingStrength != null) setPreprocessingStrength(settings.preprocessingStrength);
+    if (settings.preprocessBilateral != null) setPreprocessBilateral(settings.preprocessBilateral);
+    if (settings.preprocessBilateralStrength != null) setPreprocessBilateralStrength(settings.preprocessBilateralStrength);
+    if (settings.preprocessEdgeDetect != null) setPreprocessEdgeDetect(settings.preprocessEdgeDetect);
+    if (settings.bcsEnabled != null) setBcsEnabled(settings.bcsEnabled);
     if (settings.paletteMode) setPaletteMode(settings.paletteMode);
     if (settings.useKmeans != null) setUseKmeans(settings.useKmeans);
     if (settings.kmeansColors != null) setKmeansColors(settings.kmeansColors);
     if (settings.brightness != null) setBrightness(settings.brightness);
     if (settings.contrast != null) setContrast(settings.contrast);
     if (settings.saturation != null) setSaturation(settings.saturation);
+    if (settings.vibrance != null) setVibrance(settings.vibrance);
     if (settings.colorMatchAlgorithm) setColorMatchAlgorithm(settings.colorMatchAlgorithm);
     if (settings.preserveDetailThreshold != null) setPreserveDetailThreshold(settings.preserveDetailThreshold);
     if (settings.filterTrivialColors != null) setFilterTrivialColors(settings.filterTrivialColors);
     if (settings.trivialThreshold != null) { setTrivialThreshold(settings.trivialThreshold); setDisplayTrivialThreshold(String(settings.trivialThreshold)); }
     if (settings.trivialThresholdMode) setTrivialThresholdMode(settings.trivialThresholdMode);
-    if (settings.pixeloeThickness != null) setPixeloeThickness(settings.pixeloeThickness);
-    if (settings.pixeloePatchSize != null) setPixeloePatchSize(settings.pixeloePatchSize);
+    if (settings.preprocessBilateral != null) setPreprocessBilateral(settings.preprocessBilateral);
+    if (settings.preprocessBilateralStrength != null) setPreprocessBilateralStrength(settings.preprocessBilateralStrength);
+    if (settings.preprocessSharpening != null) setPreprocessSharpening(settings.preprocessSharpening);
+    if (settings.preprocessSharpeningStrength != null) setPreprocessSharpeningStrength(settings.preprocessSharpeningStrength);
+    if (settings.preprocessEdgeDetect != null) setPreprocessEdgeDetect(settings.preprocessEdgeDetect);
+    if (settings.bcsEnabled != null) setBcsEnabled(settings.bcsEnabled);
     if (settings.edgeDetectBlur != null) setEdgeDetectBlur(settings.edgeDetectBlur);
     if (settings.edgeDetectAlgorithm) setEdgeDetectAlgorithm(settings.edgeDetectAlgorithm);
+    if (settings.outlineConsistency != null) setOutlineConsistency(settings.outlineConsistency);
+    if (settings.outlineColors != null) setOutlineColors(settings.outlineColors);
+    if (settings.clusterCleanup != null) setClusterCleanup(settings.clusterCleanup);
+    if (settings.clusterMinSize != null) setClusterMinSize(settings.clusterMinSize);
+    if (settings.serpentineDither != null) setSerpentineDither(settings.serpentineDither);
+    if (settings.gammaCorrectDither != null) setGammaCorrectDither(settings.gammaCorrectDither);
     if (settings.autoUpdate != null) setAutoUpdate(settings.autoUpdate);
     if (settings.customPaletteInput != null) setCustomPaletteInput(settings.customPaletteInput);
     if (settings.selectedPreset != null) setSelectedPreset(settings.selectedPreset);
@@ -1023,38 +1179,88 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
             <div className="space-y-2">
               <label className="text-xs font-semibold text-gray-400 uppercase">Dimensions</label>
               <div className="space-y-2">
+                {/* W × H inputs */}
                 <div className="flex gap-2 items-end">
                   <div className="flex-1">
-                    <label className="text-xs text-gray-500">Height (px)</label>
+                    <label className="text-xs text-gray-500">W (px)</label>
                     <input
                       type="text"
                       inputMode="numeric"
-                      value={displayHeight}
+                      value={displayWidth}
                       onChange={(e) => {
-                        // Update display value
-                        setDisplayHeight(e.target.value);
-                        // Only update state if it's a valid number
-                        if (e.target.value !== '' && e.target.value !== '-') {
-                          const value = Number(e.target.value);
-                          if (!isNaN(value) && value > 0) {
-                            setTargetHeight(value);
+                        setDisplayWidth(e.target.value);
+                        const v = Number(e.target.value);
+                        if (!isNaN(v) && v > 0) {
+                          setTargetWidth(v);
+                          if (aspectRatioLocked && originalWidth > 0) {
+                            const h = Math.round(v * originalHeight / originalWidth);
+                            setTargetHeight(h);
                           }
                         }
                       }}
                       className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
                     />
                   </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-500">H (px)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={displayHeight}
+                      onChange={(e) => {
+                        setDisplayHeight(e.target.value);
+                        const v = Number(e.target.value);
+                        if (!isNaN(v) && v > 0) {
+                          setTargetHeight(v);
+                          if (aspectRatioLocked && originalHeight > 0) {
+                            const w = Math.round(v * originalWidth / originalHeight);
+                            setTargetWidth(w);
+                          }
+                        }
+                      }}
+                      className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setAspectRatioLocked(l => !l)}
+                    className={`p-1.5 rounded transition-colors flex-shrink-0 self-end mb-0.5 ${aspectRatioLocked ? 'text-blue-400 hover:text-blue-300' : 'text-gray-600 hover:text-gray-400'}`}
+                    title={aspectRatioLocked ? 'Aspect ratio locked — click to unlock' : 'Aspect ratio unlocked — click to lock'}
+                    aria-label={aspectRatioLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+                  >
+                    {aspectRatioLocked ? (
+                      // Linked chain icon
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                      </svg>
+                    ) : (
+                      // Broken chain icon
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 17H7A5 5 0 0 1 7 7h2"/>
+                        <path d="M15 7h2a5 5 0 0 1 4 8"/>
+                        <line x1="8" y1="12" x2="12" y2="12"/>
+                        <line x1="2" y1="2" x2="22" y2="22"/>
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                {/* Common sizes shortcut + reset */}
+                <div className="flex gap-2 items-center">
                   <select
                     className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-400"
                     onChange={(e) => {
                       if (e.target.value) {
-                        debounceTimeRef.current = 100; // Fast update for dropdown
-                        setTargetHeight(Number(e.target.value));
+                        debounceTimeRef.current = 100;
+                        const h = Number(e.target.value);
+                        setTargetHeight(h);
+                        if (aspectRatioLocked && originalHeight > 0) {
+                          setTargetWidth(Math.round(h * originalWidth / originalHeight));
+                        }
                       }
                     }}
                     value={COMMON_HEIGHTS.includes(targetHeight) ? targetHeight : ""}
                   >
-                    <option value="" disabled>common sizes</option>
+                    <option value="" disabled>common sizes (H)</option>
                     {COMMON_HEIGHTS.map(h => (
                       <option key={h} value={h}>{h}px</option>
                     ))}
@@ -1062,7 +1268,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                   <button
                     onClick={handleHeightReset}
                     className="text-xs px-2 py-1 text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded transition-colors whitespace-nowrap flex-shrink-0"
-                    title="Reset height to default"
+                    title="Reset to original dimensions"
                   >
                     Reset
                   </button>
@@ -1089,48 +1295,9 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                   <option value="pixeloe-k-centroid">⚠️ PixelOE K-Centroid (Experimental)</option>
                 </select>
                 {(resamplingMethod === 'pixeloe-nearest' || resamplingMethod === 'pixeloe-contrast' || resamplingMethod === 'pixeloe-k-centroid') && (
-                  <div className="mt-2 space-y-2 bg-yellow-900/20 border border-yellow-700/50 rounded p-2">
-                    <div className="flex items-center gap-1 text-xs text-yellow-400 font-semibold">
-                      <span>⚠️</span>
-                      <span>PixelOE — Outline-Aware Pixelization</span>
-                    </div>
-                    <p className="text-xs text-yellow-300/70">
-                      {resamplingMethod === 'pixeloe-nearest'
-                        ? 'Outline expansion then nearest-neighbor downscale. Clean and fast — recommended starting point.'
-                        : resamplingMethod === 'pixeloe-contrast'
-                        ? 'Contrast-aware downscaling in LAB space. Preserves dark/bright details by adaptively selecting pixels per patch.'
-                        : 'K-means clustering per tile to find the dominant color. Produces clean, flat pixel art.'}
-                    </p>
-                    <div>
-                      <div className="flex justify-between text-xs text-gray-400">
-                        <span>Outline Thickness</span>
-                        <span>{pixeloeThickness}</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="1"
-                        max="4"
-                        value={pixeloeThickness}
-                        onChange={(e) => setPixeloeThickness(Number(e.target.value))}
-                        className="w-full"
-                      />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-xs text-gray-400">
-                        <span>Patch Size</span>
-                        <span>{pixeloePatchSize}px</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="4"
-                        max="32"
-                        step="4"
-                        value={pixeloePatchSize}
-                        onChange={(e) => setPixeloePatchSize(Number(e.target.value))}
-                        className="w-full"
-                      />
-                    </div>
-                  </div>
+                  <p className="mt-2 text-xs text-yellow-400/80">
+                    ⚠️ Configure PixelOE thickness &amp; patch size under <span className="font-semibold">Extra Features → PixelOE Settings</span>.
+                  </p>
                 )}
               </div>
               <div>
@@ -1148,7 +1315,6 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
               </div>
             </div>
 
-            {/* Semi-Transparent Warning */}
             {hasSemiTransparent && (
               <div className="bg-yellow-900/30 border border-yellow-700 rounded p-3 flex gap-3">
                 <div className="text-yellow-500 text-xl flex-shrink-0">⚠️</div>
@@ -1161,18 +1327,16 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
 
             {/* Palette */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-gray-400 uppercase">Palette</label>
-                {(paletteMode === 'custom' && includeGeopixelsBase) && (
-                  <div className="group relative">
-                    <span className="cursor-help text-xs text-blue-400">Fun Fact?</span>
-                    <div className="absolute bottom-full right-0 mb-2 w-64 p-2 bg-gray-900 border border-gray-600 rounded shadow-xl text-xs text-gray-300 hidden group-hover:block z-50">
-                      If you play on Geopixels, you can export your palette by typing <code className="text-yellow-400">userData.colors</code> in the browser console. Paste the result here!
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={() => setIsPaletteOpen(o => !o)}
+                className="flex items-center justify-between w-full text-xs font-semibold text-gray-400 hover:text-gray-300 uppercase"
+              >
+                <span>Palette</span>
+                <span>{isPaletteOpen ? '▼' : '▶'}</span>
+              </button>
 
+              {isPaletteOpen && (
+              <div className="space-y-2">
               <div className="flex flex-col space-y-1">
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
@@ -1328,10 +1492,21 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                       )}
                     </div>
 
-                    {/* Active color count */}
+                    {/* Active color count + Prune */}
                     {activeColorCount.total > 0 && colorStats.size > 0 && (
-                      <div className="text-xs text-gray-500">
-                        {activeColorCount.active} / {activeColorCount.total} colors used
+                      <div className="space-y-1">
+                        <div className="text-xs text-gray-500">
+                          {activeColorCount.active} / {activeColorCount.total} colors used
+                        </div>
+                        {colorStats.size > 0 && (
+                          <button
+                            onClick={handlePruneColors}
+                            className="w-full px-2 py-1 bg-red-900/50 hover:bg-red-800/60 text-red-300 text-xs rounded border border-red-700/50 transition-colors"
+                            title="Remove all palette colors that have zero pixels in the current preview"
+                          >
+                            Prune Unused Colors
+                          </button>
+                        )}
                       </div>
                     )}
 
@@ -1551,15 +1726,6 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                             <option value="pixels">px</option>
                           </select>
                         </div>
-                        {colorStats.size > 0 && (
-                          <button
-                            onClick={handlePruneColors}
-                            className="w-full px-2 py-1 bg-red-900/50 hover:bg-red-800/60 text-red-300 text-xs rounded border border-red-700/50 transition-colors"
-                            title="Remove all palette colors that have zero pixels in the current preview"
-                          >
-                            Prune Unused Colors
-                          </button>
-                        )}
                       </div>
                     )}
 
@@ -1572,7 +1738,10 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
               {paletteMode === 'custom' && (
                 <div className="space-y-2 border-t border-gray-700 pt-2">
                   <div className="flex items-center justify-between gap-2">
-                    <label className="text-xs font-semibold text-gray-400 uppercase whitespace-nowrap">Suggest Colors</label>
+                    <label
+                      className="text-xs font-semibold text-gray-400 uppercase whitespace-nowrap cursor-help"
+                      title="Analyzes the image to find dominant colors missing from your palette"
+                    >Suggest Colors</label>
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
@@ -1625,120 +1794,81 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
                     </div>
                   )}
 
-                  <p className="text-xs text-gray-500">Analyzes the image to find dominant colors missing from your palette.</p>
                 </div>
               )}
-            </div>
 
-            {/* Dithering */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-gray-400 uppercase">Dithering</label>
-              <select
-                value={ditherMethod}
-                onChange={(e) => { debounceTimeRef.current = 100; setDitherMethod(e.target.value); }}
-                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-              >
-                {DITHER_ALGORITHMS.map(algo => (
-                  <option key={algo.value} value={algo.value}>{algo.label}</option>
-                ))}
-              </select>
-
-              {ditherMethod !== 'none' && (
-                <div>
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>Strength</span>
-                    <span>{ditherStrength}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={ditherStrength}
-                    onChange={(e) => setDitherStrength(Number(e.target.value))}
-                    className="w-full"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* K-Means Clustering */}
-            <div className="space-y-2">
-              <div className="group relative inline-block w-full">
-                <label className={`flex items-center space-x-2 ${paletteMode !== 'none' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
-                  <input
-                    type="checkbox"
-                    checked={useKmeans}
-                    onChange={(e) => setUseKmeans(e.target.checked)}
-                    disabled={paletteMode !== 'none'}
-                  />
-                  <span className="text-xs font-semibold text-gray-400 uppercase">K-Means Color Reduction</span>
-                </label>
-                {paletteMode !== 'none' && (
-                  <div className="absolute bottom-full left-0 mb-2 w-64 p-2 bg-gray-900 border border-gray-600 rounded shadow-xl text-xs text-gray-300 hidden group-hover:block z-50">
-                    K-Means is only available when "No Recoloring" is selected. It's used to reduce the color space when you're not providing a specific palette.
-                  </div>
-                )}
-              </div>
-
-              {useKmeans && (
-                <div>
-                  <label className="text-xs text-gray-500">Number of Colors</label>
-                  <input
-                    type="number"
-                    min="2"
-                    max="256"
-                    value={kmeansColors}
-                    onChange={(e) => setKmeansColors(Number(e.target.value))}
-                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Reduces image to N dominant colors before applying palette/dithering.</p>
-
-                  {generatedPalette.length > 0 && (
-                    <button
-                      onClick={handleSendKmeansToCustom}
-                      className="w-full mt-2 px-3 py-1.5 bg-teal-700 hover:bg-teal-600 text-white text-xs font-medium rounded transition-colors"
-                      title="Send K-Means palette to Geopixels Base + Custom"
-                    >
-                      Send Colors to Custom Palette
-                    </button>
+              {/* K-Means Clustering — only shown when No Coloring selected */}
+              {paletteMode === 'none' && (
+                <div className="space-y-2 border-t border-gray-700 pt-2">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useKmeans}
+                      onChange={(e) => setUseKmeans(e.target.checked)}
+                    />
+                    <span>K-Means Color Reduction</span>
+                  </label>
+                  {useKmeans && (
+                    <div className="pl-5 space-y-1">
+                      <label className="text-xs text-gray-500">Number of Colors</label>
+                      <input
+                        type="number"
+                        min="2"
+                        max="256"
+                        value={kmeansColors}
+                        onChange={(e) => setKmeansColors(Number(e.target.value))}
+                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
+                      />
+                      <p className="text-xs text-gray-500">Reduces image to N dominant colors before applying palette/dithering.</p>
+                      {generatedPalette.length > 0 && (
+                        <button
+                          onClick={handleSendKmeansToCustom}
+                          className="w-full mt-2 px-3 py-1.5 bg-teal-700 hover:bg-teal-600 text-white text-xs font-medium rounded transition-colors"
+                        >
+                          Send Colors to Custom Palette
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
-            </div>
 
-            {/* Color Sampling Mask */}
-            {(paletteMode === 'none' || paletteMode === 'custom') && (
-              <div className="space-y-2">
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={samplingMaskEnabled}
-                    onChange={(e) => setSamplingMaskEnabled(e.target.checked)}
-                  />
-                  <span className="text-xs font-semibold text-gray-400 uppercase">Apply Sampling Mask</span>
-                </label>
-                {samplingMaskEnabled && (
-                  <div className="space-y-2">
-                    <button
-                      onClick={() => setIsSamplingMaskModalOpen(true)}
-                      className="w-full px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-medium rounded transition-colors"
-                    >
-                      Configure Mask...
-                    </button>
-                    {samplingMask && (
-                      <div className="text-xs text-gray-500 bg-gray-800 rounded px-2 py-1">
-                        Mask active — {samplingMask.reduce((s, v) => s + (v > 0 ? 1 : 0), 0).toLocaleString()} px selected
-                      </div>
-                    )}
-                    <p className="text-xs text-gray-500">
-                      {paletteMode === 'none'
-                        ? 'K-Means will only sample colors from the masked region.'
-                        : 'Color suggestions will only sample from the masked region.'}
-                    </p>
-                  </div>
-                )}
+              {/* Color Sampling Mask */}
+              {(paletteMode === 'none' || paletteMode === 'custom') && (
+                <div className="space-y-2 border-t border-gray-700 pt-2">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={samplingMaskEnabled}
+                      onChange={(e) => setSamplingMaskEnabled(e.target.checked)}
+                    />
+                    <span>Apply Sampling Mask</span>
+                  </label>
+                  {samplingMaskEnabled && (
+                    <div className="pl-5 space-y-2">
+                      <button
+                        onClick={() => setIsSamplingMaskModalOpen(true)}
+                        className="w-full px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-medium rounded transition-colors"
+                      >
+                        Configure Mask...
+                      </button>
+                      {samplingMask && (
+                        <div className="text-xs text-gray-500 bg-gray-800 rounded px-2 py-1">
+                          Mask active — {samplingMask.reduce((s, v) => s + (v > 0 ? 1 : 0), 0).toLocaleString()} px selected
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-500">
+                        {paletteMode === 'none'
+                          ? 'K-Means will only sample colors from the masked region.'
+                          : 'Color suggestions will only sample from the masked region.'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
               </div>
-            )}
+              )}
+            </div>
 
             {/* Extra Features */}
             <div className="space-y-2 border-t border-gray-700 pt-2">
@@ -1751,183 +1881,215 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
               </button>
 
               {isExtraFeaturesOpen && (
-                <div className="space-y-3 pt-2">
-                  <div className="border-b border-gray-700 pb-3">
-                    <label className="text-xs font-semibold text-gray-400 uppercase mb-2 block">Pre-processing (Experimental)</label>
+                <div className="space-y-4 pt-1">
+
+                  {/* ── Dithering ── */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-gray-400 uppercase block">Dithering</label>
                     <select
-                      value={preprocessingMethod}
-                      onChange={(e) => { debounceTimeRef.current = 100; setPreprocessingMethod(e.target.value as any); }}
-                      className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm mb-2"
-                      title="Apply filters before pixelation to improve results (may impact performance)"
+                      value={ditherMethod}
+                      onChange={(e) => { debounceTimeRef.current = 100; setDitherMethod(e.target.value); }}
+                      className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
                     >
-                      <option value="none">None</option>
-                      <option value="kuwahara">Kuwahara (Oil Paint / Flatten)</option>
-                      <option value="median">Median (De-noise / Smooth)</option>
-                      <option value="bilateral">Bilateral (Soft Blur)</option>
-                      <option value="edge-detect">Edge Detect (Outline Overlay)</option>
+                      {DITHER_ALGORITHMS.map(algo => (
+                        <option key={algo.value} value={algo.value}>{algo.label}</option>
+                      ))}
                     </select>
-
-                    {preprocessingMethod !== 'none' && (
+                    {ditherMethod !== 'none' && (
                       <div>
-                        <div className="flex justify-between text-xs text-gray-500 mb-2">
-                          <span>Intensity</span>
-                          <span>{preprocessingStrength}%</span>
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>Strength</span>
+                          <span>{ditherStrength}%</span>
                         </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={preprocessingStrength}
-                          onChange={(e) => { debounceTimeRef.current = 100; setPreprocessingStrength(Number(e.target.value)); }}
-                          className="w-full"
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          {preprocessingMethod === 'bilateral' && 'Smooths surfaces while keeping edges. Good for photographs.'}
-                          {preprocessingMethod === 'kuwahara' && 'Best for Pixel Art. Creates flat, "painted" clusters of color.'}
-                          {preprocessingMethod === 'median' && 'Removes noise and small details. Great for cleaning up JPEGs before pixelating.'}
-                          {preprocessingMethod === 'edge-detect' && 'Overlays detected edges as dark lines onto the image. Helps outlines survive downscaling.'}
-                        </p>
-
-                        {preprocessingMethod === 'edge-detect' && (
-                          <div className="mt-3 space-y-2 border-t border-gray-700 pt-2">
-                            <div>
-                              <div className="flex justify-between text-xs text-gray-500 mb-1">
-                                <span>Blurring</span>
-                                <span>{edgeDetectBlur}px</span>
-                              </div>
-                              <input
-                                type="range"
-                                min="0"
-                                max="10"
-                                value={edgeDetectBlur}
-                                onChange={(e) => { debounceTimeRef.current = 100; setEdgeDetectBlur(Number(e.target.value)); }}
-                                className="w-full"
-                              />
-                              <p className="text-xs text-gray-600 mt-1">Pre-blur before detection. Higher = only bold edges, lower = fine detail edges.</p>
-                            </div>
-                            <div>
-                              <label className="text-xs text-gray-500">Algorithm</label>
-                              <select
-                                value={edgeDetectAlgorithm}
-                                onChange={(e) => { debounceTimeRef.current = 100; setEdgeDetectAlgorithm(e.target.value as any); }}
-                                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm"
-                              >
-                                <option value="sobel">Sobel (General Purpose)</option>
-                                <option value="scharr">Scharr (Bold Edges)</option>
-                                <option value="laplacian">Laplacian (Thin Lines)</option>
-                              </select>
-                            </div>
-                          </div>
-                        )}
+                        <input type="range" min="0" max="100" value={ditherStrength} onChange={(e) => setDitherStrength(Number(e.target.value))} className="w-full" />
+                      </div>
+                    )}
+                    {['floyd-steinberg','burkes','stucki','sierra-2','sierra-lite','atkinson','jarvis','shiau-fan'].includes(ditherMethod) && (
+                      <div className="flex gap-3">
+                        <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer" title="Reverse scan direction on every other row. Reduces directional worm artifacts.">
+                          <input type="checkbox" checked={serpentineDither} onChange={(e) => { debounceTimeRef.current = 100; setSerpentineDither(e.target.checked); }} />
+                          Serpentine
+                        </label>
+                        <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer" title="Diffuse error in linear-light space. Better gradients on bright/dark transitions.">
+                          <input type="checkbox" checked={gammaCorrectDither} onChange={(e) => { debounceTimeRef.current = 100; setGammaCorrectDither(e.target.checked); }} />
+                          Gamma-correct
+                        </label>
                       </div>
                     )}
                   </div>
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>Brightness</span>
-                      <div className="flex items-center gap-2">
-                        <span>{brightness}</span>
-                        <button
-                          onClick={() => setBrightness(0)}
-                          className="text-gray-500 hover:text-white disabled:opacity-0 transition-opacity"
-                          title="Reset Brightness"
-                          disabled={brightness === 0}
-                        >
-                          ↺
-                        </button>
+
+                  {/* ── Pre-processing ── */}
+                  <div className="space-y-2 border-t border-gray-700 pt-3">
+                    <label className="text-xs font-semibold text-gray-400 uppercase block">Pre-processing</label>
+
+                    {/* Sharpening */}
+                    <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                      <input type="checkbox" checked={preprocessSharpening} onChange={(e) => { debounceTimeRef.current = 100; setPreprocessSharpening(e.target.checked); }} />
+                      Sharpen
+                    </label>
+                    {preprocessSharpening && (
+                      <div className="pl-5 space-y-1">
+                        <div className="flex justify-between text-xs text-gray-500"><span>Strength</span><span>{preprocessSharpeningStrength}</span></div>
+                        <input type="range" min="1" max="300" value={preprocessSharpeningStrength} onChange={(e) => { debounceTimeRef.current = 100; setPreprocessSharpeningStrength(Number(e.target.value)); }} className="w-full" />
+                        <p className="text-xs text-gray-500">Unsharp mask applied before downscaling. Preserves hair strands, eye detail, and fine linework.</p>
                       </div>
-                    </div>
-                    <input
-                      type="range"
-                      min="-100"
-                      max="100"
-                      value={brightness}
-                      onChange={(e) => setBrightness(Number(e.target.value))}
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>Contrast</span>
-                      <div className="flex items-center gap-2">
-                        <span>{contrast}</span>
-                        <button
-                          onClick={() => setContrast(0)}
-                          className="text-gray-500 hover:text-white disabled:opacity-0 transition-opacity"
-                          title="Reset Contrast"
-                          disabled={contrast === 0}
-                        >
-                          ↺
-                        </button>
+                    )}
+
+                    {/* Bilateral */}
+                    <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                      <input type="checkbox" checked={preprocessBilateral} onChange={(e) => { debounceTimeRef.current = 100; setPreprocessBilateral(e.target.checked); }} />
+                      Bilateral Filter
+                    </label>
+                    {preprocessBilateral && (
+                      <div className="pl-5 space-y-1">
+                        <div className="flex justify-between text-xs text-gray-500"><span>Intensity</span><span>{preprocessBilateralStrength}%</span></div>
+                        <input type="range" min="1" max="100" value={preprocessBilateralStrength} onChange={(e) => { debounceTimeRef.current = 100; setPreprocessBilateralStrength(Number(e.target.value)); }} className="w-full" />
+                        <p className="text-xs text-gray-500">Smooths flat color areas while keeping hard edges. Good for reducing photo noise before pixelation.</p>
                       </div>
-                    </div>
-                    <input
-                      type="range"
-                      min="-100"
-                      max="100"
-                      value={contrast}
-                      onChange={(e) => setContrast(Number(e.target.value))}
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>Saturation</span>
-                      <div className="flex items-center gap-2">
-                        <span>{saturation}</span>
-                        <button
-                          onClick={() => setSaturation(0)}
-                          className="text-gray-500 hover:text-white disabled:opacity-0 transition-opacity"
-                          title="Reset Saturation"
-                          disabled={saturation === 0}
-                        >
-                          ↺
-                        </button>
+                    )}
+
+                    {/* Edge Detect */}
+                    <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                      <input type="checkbox" checked={preprocessEdgeDetect} onChange={(e) => { debounceTimeRef.current = 100; setPreprocessEdgeDetect(e.target.checked); }} />
+                      Edge Detect Overlay
+                    </label>
+                    {preprocessEdgeDetect && (
+                      <div className="pl-5 space-y-2">
+                        <p className="text-xs text-gray-500">Overlays detected edges as dark lines. Helps outlines survive downscaling.</p>
+                        <div>
+                          <div className="flex justify-between text-xs text-gray-500"><span>Strength</span><span>{edgeDetectBlur === 0 ? 'off' : `${edgeDetectBlur}/10`}</span></div>
+                          <input type="range" min="0" max="10" value={edgeDetectBlur} onChange={(e) => { debounceTimeRef.current = 100; setEdgeDetectBlur(Number(e.target.value)); }} className="w-full" />
+                          <p className="text-xs text-gray-600">0 = no effect. Slide right to increase overlay intensity.</p>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Algorithm</label>
+                          <select value={edgeDetectAlgorithm} onChange={(e) => { debounceTimeRef.current = 100; setEdgeDetectAlgorithm(e.target.value as any); }} className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm">
+                            <option value="sobel">Sobel (General Purpose)</option>
+                            <option value="scharr">Scharr (Bold Edges)</option>
+                            <option value="laplacian">Laplacian (Thin Lines)</option>
+                          </select>
+                        </div>
                       </div>
-                    </div>
-                    <input
-                      type="range"
-                      min="-100"
-                      max="100"
-                      value={saturation}
-                      onChange={(e) => setSaturation(Number(e.target.value))}
-                      className="w-full"
-                    />
-                  </div>
-                  <div className="border-t border-gray-700 pt-3">
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>Preserve Detail</span>
-                      <div className="flex items-center gap-2">
-                        <span>ΔE≤{preserveDetailThreshold.toFixed(1)}</span>
-                        <button
-                          onClick={() => setPreserveDetailThreshold(0)}
-                          className="text-gray-500 hover:text-white disabled:opacity-0 transition-opacity"
-                          title="Reset Preserve Detail"
-                          disabled={preserveDetailThreshold === 0}
-                        >
-                          ↺
-                        </button>
+                    )}
+
+                    {/* Tone & Color */}
+                    <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                      <input type="checkbox" checked={bcsEnabled} onChange={(e) => setBcsEnabled(e.target.checked)} />
+                      Tone &amp; Color
+                    </label>
+                    {bcsEnabled && (
+                      <div className="pl-5 space-y-3">
+                        <div>
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Brightness</span>
+                            <div className="flex items-center gap-1">
+                              <span>{brightness}</span>
+                              <button onClick={() => setBrightness(0)} disabled={brightness === 0} className="text-gray-500 hover:text-white disabled:opacity-0 transition-opacity">↺</button>
+                            </div>
+                          </div>
+                          <input type="range" min="-100" max="100" value={brightness} onChange={(e) => setBrightness(Number(e.target.value))} className="w-full" />
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Contrast</span>
+                            <div className="flex items-center gap-1">
+                              <span>{contrast}</span>
+                              <button onClick={() => setContrast(0)} disabled={contrast === 0} className="text-gray-500 hover:text-white disabled:opacity-0 transition-opacity">↺</button>
+                            </div>
+                          </div>
+                          <input type="range" min="-100" max="100" value={contrast} onChange={(e) => setContrast(Number(e.target.value))} className="w-full" />
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Saturation</span>
+                            <div className="flex items-center gap-1">
+                              <span>{saturation}</span>
+                              <button onClick={() => setSaturation(0)} disabled={saturation === 0} className="text-gray-500 hover:text-white disabled:opacity-0 transition-opacity">↺</button>
+                            </div>
+                          </div>
+                          <input type="range" min="-100" max="100" value={saturation} onChange={(e) => setSaturation(Number(e.target.value))} className="w-full" />
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span title="Selectively boosts dull/desaturated colors more than already-vivid ones. Better than flat saturation for anime.">Vibrance</span>
+                            <div className="flex items-center gap-1">
+                              <span>{vibrance}</span>
+                              <button onClick={() => setVibrance(0)} disabled={vibrance === 0} className="text-gray-500 hover:text-white disabled:opacity-0 transition-opacity">↺</button>
+                            </div>
+                          </div>
+                          <input type="range" min="-100" max="100" value={vibrance} onChange={(e) => setVibrance(Number(e.target.value))} className="w-full" />
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Preserve Detail</span>
+                            <div className="flex items-center gap-1">
+                              <span>ΔE≤{preserveDetailThreshold.toFixed(1)}</span>
+                              <button onClick={() => setPreserveDetailThreshold(0)} disabled={preserveDetailThreshold === 0} className="text-gray-500 hover:text-white disabled:opacity-0 transition-opacity">↺</button>
+                            </div>
+                          </div>
+                          <input type="range" min="0" max="5" step="0.1" value={preserveDetailThreshold} onChange={(e) => { debounceTimeRef.current = 100; setPreserveDetailThreshold(Number(e.target.value)); }} className="w-full" />
+                          <p className="text-xs text-gray-500 mt-1">Pixels within this ΔE threshold keep their original color. Higher = more detail preserved.</p>
+                        </div>
                       </div>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="5"
-                      step="0.1"
-                      value={preserveDetailThreshold}
-                      onChange={(e) => { debounceTimeRef.current = 100; setPreserveDetailThreshold(Number(e.target.value)); }}
-                      className="w-full"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Pixels within this ΔE threshold keep their original color instead of snapping to palette. Higher = more detail preserved.
-                    </p>
+                    )}
                   </div>
+
+                  {/* ── PixelOE settings ── */}
+                  <div className="space-y-2 border-t border-gray-700 pt-3">
+                    <label className="text-xs font-semibold text-gray-400 uppercase block">PixelOE Settings</label>
+                    <p className="text-xs text-gray-500">Only active when a PixelOE resampling method is selected.</p>
+                    {['pixeloe-nearest','pixeloe-contrast','pixeloe-k-centroid'].includes(resamplingMethod) && (
+                      <div className="space-y-2">
+                        <div>
+                          <div className="flex justify-between text-xs text-gray-400"><span>Outline Thickness</span><span>{pixeloeThickness}</span></div>
+                          <input type="range" min="1" max="4" value={pixeloeThickness} onChange={(e) => setPixeloeThickness(Number(e.target.value))} className="w-full" />
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-xs text-gray-400"><span>Patch Size</span><span>{pixeloePatchSize}px</span></div>
+                          <input type="range" min="1" max="32" step="1" value={pixeloePatchSize} onChange={(e) => setPixeloePatchSize(Number(e.target.value))} className="w-full" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Post-processing ── */}
+                  {paletteMode !== 'none' && (
+                    <div className="space-y-2 border-t border-gray-700 pt-3">
+                      <label className="text-xs font-semibold text-gray-400 uppercase block">Post-processing</label>
+
+                      {/* Outline Color Consistency */}
+                      <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer" title="Detect dark edge pixels and unify them to the most-dominant palette colors that appear on those edges.">
+                        <input type="checkbox" checked={outlineConsistency} onChange={(e) => { debounceTimeRef.current = 100; setOutlineConsistency(e.target.checked); }} />
+                        Outline Color Consistency
+                      </label>
+                      {outlineConsistency && (
+                        <div className="pl-5 space-y-1">
+                          <div className="flex justify-between text-xs text-gray-500"><span>Max outline colors</span><span>{outlineColors}</span></div>
+                          <input type="range" min="1" max="8" step="1" value={outlineColors} onChange={(e) => { debounceTimeRef.current = 100; setOutlineColors(Number(e.target.value)); }} className="w-full" />
+                          <p className="text-xs text-gray-500">1 = one unified contour color. Increase for shaded outlines.</p>
+                        </div>
+                      )}
+
+                      {/* Cluster Cleanup */}
+                      <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer" title="Finds connected same-color regions smaller than N pixels and repaints them with the dominant neighbor color. Removes dither speckles in flat regions.">
+                        <input type="checkbox" checked={clusterCleanup} onChange={(e) => { debounceTimeRef.current = 100; setClusterCleanup(e.target.checked); }} />
+                        Cluster Cleanup
+                      </label>
+                      {clusterCleanup && (
+                        <div className="pl-5 space-y-1">
+                          <div className="flex justify-between text-xs text-gray-500"><span>Min region size</span><span>{clusterMinSize}px</span></div>
+                          <input type="range" min="2" max="32" step="1" value={clusterMinSize} onChange={(e) => { debounceTimeRef.current = 100; setClusterMinSize(Number(e.target.value)); }} className="w-full" />
+                          <p className="text-xs text-gray-500">Regions with fewer than this many pixels are absorbed into their dominant neighbor. Higher = cleaner but may erase intentional fine detail.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                 </div>
               )}
             </div>
           </div>
 
-          {/* Execute button - sticky footer */}
           {!autoUpdate && (
             <div className="p-4 border-t border-gray-700 bg-gray-800/30 flex-shrink-0">
               <button
@@ -2007,6 +2169,9 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           <div
             ref={previewContainerRef}
             className="flex-1 overflow-auto bg-gray-900"
+            onMouseDown={handlePreviewMouseDown}
+            onAuxClick={(e) => { if (e.button === 1) e.preventDefault(); }}
+            onContextMenu={(e) => e.preventDefault()}
           >
             {previewImage ? (
               <div
@@ -2169,6 +2334,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           isOpen={isEyedropperOpen}
           onClose={() => setIsEyedropperOpen(false)}
           imageDataUrl={layer.imageData}
+          pixelatedImageUrl={previewImage ?? undefined}
           onAddColors={handleEyedropperColors}
         />
 
@@ -2184,6 +2350,7 @@ const PixelatorModal: React.FC<PixelatorModalProps> = ({ isOpen, onClose, layer 
           isOpen={isGradientPickerOpen}
           onClose={() => setIsGradientPickerOpen(false)}
           imageDataUrl={layer.imageData}
+          pixelatedImageUrl={previewImage ?? undefined}
           onAddColors={handleEyedropperColors}
         />
 

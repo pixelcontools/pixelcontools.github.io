@@ -200,10 +200,12 @@ function LayerItem({ layer, isSelected }: LayerItemProps) {
       aria-label={`Layer: ${layer.name}`}
       aria-selected={isSelected}
       role="option"
-      className={`group p-2 rounded border transition-all cursor-pointer select-none ${
+      className={`group p-2 rounded border transition-colors cursor-pointer select-none ${
         isDragOver ? 'bg-green-900 border-green-400 scale-105' : ''
       } ${
-        isSelected
+        isSelected && layer.locked
+          ? 'bg-blue-900 border-red-500 text-white layer-selected-locked'
+          : isSelected
           ? 'bg-blue-900 border-blue-500 text-white'
           : 'bg-panel-bg border-border text-gray-300 hover:bg-gray-800'
       }`}

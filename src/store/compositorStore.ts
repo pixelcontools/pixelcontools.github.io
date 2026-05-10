@@ -221,6 +221,9 @@ const useCompositorStore = create<CompositorStore>()(
                 {
                   ...layer,
                   id: newId,
+                  // Lock the first layer automatically so beginners don't
+                  // accidentally move their base image.
+                  locked: isFirstLayer ? true : (layer.locked ?? false),
                 },
               ],
               modified: new Date().toISOString(),

@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes locked-border-pulse {
+  0%, 100% { border-color: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+  50% { border-color: #f87171; box-shadow: 0 0 0 3px rgba(239,68,68,0); }
+}
+
+.layer-selected-locked {
+  animation: locked-border-pulse 1.4s ease-in-out infinite;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -5,6 +5,7 @@ interface GradientPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   imageDataUrl: string;
+  pixelatedImageUrl?: string;
   onAddColors: (colors: string[]) => void;
 }
 
@@ -13,7 +14,7 @@ interface GradientPickerModalProps {
  * all colors along that line are captured, then a slider lets them choose
  * how many equidistant samples to keep before adding to the palette.
  */
-const GradientPickerModal: React.FC<GradientPickerModalProps> = ({ isOpen, onClose, imageDataUrl, onAddColors }) => {
+const GradientPickerModal: React.FC<GradientPickerModalProps> = ({ isOpen, onClose, imageDataUrl, pixelatedImageUrl, onAddColors }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -27,6 +28,14 @@ const GradientPickerModal: React.FC<GradientPickerModalProps> = ({ isOpen, onClo
   const [imgSize, setImgSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [hoverColor, setHoverColor] = useState<string | null>(null);
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [previewPixelation, setPreviewPixelation] = useState(false);
+
+  // Prevents zoom/pan reset when toggling "View current pixelation".
+  const imgLoadedOnceRef = useRef(false);
+  const autoFitDoneRef = useRef(false);
+  // Previous image natural size — used to scale zoom when switching between
+  // original and pixelated (which may have different pixel dimensions).
+  const prevImgSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Drag state
   const [isDragging, setIsDragging] = useState(false);
@@ -38,50 +47,80 @@ const GradientPickerModal: React.FC<GradientPickerModalProps> = ({ isOpen, onClo
   const [sampleCount, setSampleCount] = useState<number>(10);
   const [gradients, setGradients] = useState<{ raw: string[]; sampled: string[] }[]>([]);
 
-  // Pixel data cache
+  // Pixel data cache — (re)built inside image onload to avoid race when toggling preview
   const pixelDataRef = useRef<ImageData | null>(null);
   const pixelCanvasSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Load image
+  const activeUrl = previewPixelation && pixelatedImageUrl ? pixelatedImageUrl : imageDataUrl;
+
+  // Reset state only when modal (re)opens
   useEffect(() => {
-    if (!isOpen || !imageDataUrl) return;
-    const img = new Image();
-    img.onload = () => {
-      imgRef.current = img;
-      setImgSize({ w: img.naturalWidth, h: img.naturalHeight });
-      setImgLoaded(true);
-      setZoom(1);
-      setPan({ x: 0, y: 0 });
+    if (isOpen) {
       setRawGradient([]);
       setGradients([]);
       setDragStartImg(null);
       setDragEndImg(null);
-    };
-    img.src = imageDataUrl;
-  }, [isOpen, imageDataUrl]);
+      setPreviewPixelation(false);
+      imgLoadedOnceRef.current = false;
+      autoFitDoneRef.current = false;
+      prevImgSizeRef.current = { w: 0, h: 0 };
+    }
+  }, [isOpen]);
 
-  // Auto-fit zoom
+  useEffect(() => {
+    if (!isOpen || !activeUrl) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) return;
+      // Build pixel cache atomically with the image we just loaded.
+      const tc = document.createElement('canvas');
+      tc.width = img.naturalWidth;
+      tc.height = img.naturalHeight;
+      const tctx = tc.getContext('2d');
+      if (tctx) {
+        tctx.drawImage(img, 0, 0);
+        pixelDataRef.current = tctx.getImageData(0, 0, tc.width, tc.height);
+        pixelCanvasSizeRef.current = { w: tc.width, h: tc.height };
+      }
+      imgRef.current = img;
+      setImgSize({ w: img.naturalWidth, h: img.naturalHeight });
+      setImgLoaded(true);
+      if (!imgLoadedOnceRef.current) {
+        // First load: reset zoom/pan; auto-fit will set the right zoom.
+        imgLoadedOnceRef.current = true;
+        prevImgSizeRef.current = { w: img.naturalWidth, h: img.naturalHeight };
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
+      } else {
+        // Toggle: scale zoom so the image stays the same physical size on screen.
+        const ratio = prevImgSizeRef.current.w > 0
+          ? prevImgSizeRef.current.w / img.naturalWidth
+          : 1;
+        prevImgSizeRef.current = { w: img.naturalWidth, h: img.naturalHeight };
+        if (ratio !== 1) setZoom(prev => prev * ratio);
+      }
+      // Clear any in-progress drag when toggling preview
+      setDragStartImg(null);
+      setDragEndImg(null);
+      setRawGradient([]);
+    };
+    img.src = activeUrl;
+    return () => { cancelled = true; };
+  }, [isOpen, activeUrl]);
+
+  // Auto-fit zoom — only on initial open, not on preview toggle
   useEffect(() => {
     if (!imgLoaded || !containerRef.current) return;
+    if (autoFitDoneRef.current) return;
+    autoFitDoneRef.current = true;
     const cw = containerRef.current.clientWidth - 40;
     const ch = containerRef.current.clientHeight - 40;
     if (cw <= 0 || ch <= 0 || imgSize.w <= 0 || imgSize.h <= 0) return;
     const fit = Math.min(cw / imgSize.w, ch / imgSize.h, 4);
     setZoom(fit);
   }, [imgLoaded, imgSize]);
-
-  // Cache pixel data
-  useEffect(() => {
-    if (!imgLoaded || !imgRef.current) return;
-    const img = imgRef.current;
-    const tc = document.createElement('canvas');
-    tc.width = img.naturalWidth;
-    tc.height = img.naturalHeight;
-    const tctx = tc.getContext('2d')!;
-    tctx.drawImage(img, 0, 0);
-    pixelDataRef.current = tctx.getImageData(0, 0, tc.width, tc.height);
-    pixelCanvasSizeRef.current = { w: tc.width, h: tc.height };
-  }, [imgLoaded, imageDataUrl]);
 
   // Get canvas offset helpers
   const getCanvasOffset = useCallback(() => {
@@ -405,7 +444,23 @@ const GradientPickerModal: React.FC<GradientPickerModalProps> = ({ isOpen, onClo
             <span className="text-sm font-semibold text-white">🌈 Gradient Picker — Drag across image to capture gradients</span>
             <span className="text-xs text-gray-500">Drag to sample • Scroll to zoom • Middle-drag to pan</span>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-lg px-2" aria-label="Close gradient picker">✕</button>
+          <div className="flex items-center gap-4">
+            {pixelatedImageUrl && (
+              <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Show the pixelated result instead of the original. Sample colors that actually appear in the output.">
+                <input
+                  type="checkbox"
+                  checked={previewPixelation}
+                  onChange={(e) => setPreviewPixelation(e.target.checked)}
+                  className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                />
+                <span className="text-xs text-gray-300">View current pixelation</span>
+              </label>
+            )}
+            {!pixelatedImageUrl && (
+              <span className="text-xs text-gray-600 italic">Run pixelation first to enable preview</span>
+            )}
+            <button onClick={onClose} className="text-gray-400 hover:text-white text-lg px-2" aria-label="Close gradient picker">✕</button>
+          </div>
         </div>
 
         {/* Body */}
@@ -423,9 +478,16 @@ const GradientPickerModal: React.FC<GradientPickerModalProps> = ({ isOpen, onClo
               onContextMenu={(e) => e.preventDefault()}
             />
 
-            {/* Zoom indicator */}
-            <div className="absolute top-3 left-3 bg-gray-900/80 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 pointer-events-none">
-              {Math.round(zoom * 100)}%
+            {/* Zoom indicator + Reset Zoom button */}
+            <div className="absolute top-3 left-3 flex items-center gap-1">
+              <div className="bg-gray-900/80 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 pointer-events-none">
+                {Math.round(zoom * 100)}%
+              </div>
+              <button
+                onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+                className="bg-gray-900/80 border border-gray-700 rounded px-2 py-1 text-xs text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+                title="Reset zoom and pan"
+              >Reset</button>
             </div>
 
             {/* Drag hint */}

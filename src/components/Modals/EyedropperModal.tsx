@@ -5,6 +5,7 @@ interface EyedropperModalProps {
   isOpen: boolean;
   onClose: () => void;
   imageDataUrl: string;
+  pixelatedImageUrl?: string;
   onAddColors: (colors: string[]) => void;
 }
 
@@ -12,7 +13,7 @@ interface EyedropperModalProps {
  * Eyedropper modal for picking colors from the original image.
  * Supports zoom/pan. Hover shows color preview, click adds to a pick-list.
  */
-const EyedropperModal: React.FC<EyedropperModalProps> = ({ isOpen, onClose, imageDataUrl, onAddColors }) => {
+const EyedropperModal: React.FC<EyedropperModalProps> = ({ isOpen, onClose, imageDataUrl, pixelatedImageUrl, onAddColors }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -27,26 +28,86 @@ const EyedropperModal: React.FC<EyedropperModalProps> = ({ isOpen, onClose, imag
   const [panStart, setPanStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgSize, setImgSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [previewPixelation, setPreviewPixelation] = useState(false);
+
+  // Tracks whether we have completed at least one load so we don't reset
+  // zoom/pan when toggling "View current pixelation".
+  const imgLoadedOnceRef = useRef(false);
+  const autoFitDoneRef = useRef(false);
+  // Previous image natural size — used to scale zoom when switching between
+  // original and pixelated (which may have different pixel dimensions).
+  const prevImgSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Load image once
+  // Cache the pixel data to avoid re-creating temp canvas on every mouse move.
+  // Built inside the image onload callback (below) to avoid a race condition
+  // when toggling Preview Pixelation: if we used [imgLoaded, activeUrl] deps,
+  // the cache effect could fire before imgRef.current is updated to the new image,
+  // resulting in stale dimensions and the eyedropper reading top-left corner pixels
+  // (often #FFFFFF for sky/background) instead of where the user clicked.
+  const pixelDataRef = useRef<ImageData | null>(null);
+  const pixelCanvasSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+
+  // Load image — also (re)builds the pixel cache atomically.
+  // Active image URL: switches between original and pixelated preview
+  const activeUrl = previewPixelation && pixelatedImageUrl ? pixelatedImageUrl : imageDataUrl;
+
+  // Reset picked colors only when modal is (re)opened
   useEffect(() => {
-    if (!isOpen || !imageDataUrl) return;
+    if (isOpen) {
+      setPickedColors([]);
+      setPreviewPixelation(false);
+      imgLoadedOnceRef.current = false;
+      autoFitDoneRef.current = false;
+      prevImgSizeRef.current = { w: 0, h: 0 };
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !activeUrl) return;
+    let cancelled = false;
     const img = new Image();
     img.onload = () => {
+      if (cancelled) return;
+      // Build pixel cache FIRST while we know `img` is the freshly loaded image
+      const tc = document.createElement('canvas');
+      tc.width = img.naturalWidth;
+      tc.height = img.naturalHeight;
+      const tctx = tc.getContext('2d');
+      if (tctx) {
+        tctx.drawImage(img, 0, 0);
+        pixelDataRef.current = tctx.getImageData(0, 0, tc.width, tc.height);
+        pixelCanvasSizeRef.current = { w: tc.width, h: tc.height };
+      }
+      // Then update React state so canvas redraws with matched cache
       imgRef.current = img;
       setImgSize({ w: img.naturalWidth, h: img.naturalHeight });
       setImgLoaded(true);
-      // Reset state
-      setPickedColors([]);
-      setZoom(1);
-      setPan({ x: 0, y: 0 });
+      if (!imgLoadedOnceRef.current) {
+        // First load: reset zoom/pan and auto-fit will handle zoom.
+        imgLoadedOnceRef.current = true;
+        prevImgSizeRef.current = { w: img.naturalWidth, h: img.naturalHeight };
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
+      } else {
+        // Toggle: scale zoom so the image stays the same physical size on screen.
+        // e.g. original=300px → pixelated=128px: zoom *= 300/128 ≈ 2.34
+        const ratio = prevImgSizeRef.current.w > 0
+          ? prevImgSizeRef.current.w / img.naturalWidth
+          : 1;
+        prevImgSizeRef.current = { w: img.naturalWidth, h: img.naturalHeight };
+        if (ratio !== 1) setZoom(prev => prev * ratio);
+      }
     };
-    img.src = imageDataUrl;
-  }, [isOpen, imageDataUrl]);
+    img.src = activeUrl;
+    return () => { cancelled = true; };
+  }, [isOpen, activeUrl]);
 
-  // Auto-fit zoom on open
+  // Auto-fit zoom — only on initial open, not on preview toggle
   useEffect(() => {
     if (!imgLoaded || !containerRef.current) return;
+    if (autoFitDoneRef.current) return;
+    autoFitDoneRef.current = true;
     const cw = containerRef.current.clientWidth - 40;
     const ch = containerRef.current.clientHeight - 40;
     if (cw <= 0 || ch <= 0 || imgSize.w <= 0 || imgSize.h <= 0) return;
@@ -116,22 +177,6 @@ const EyedropperModal: React.FC<EyedropperModalProps> = ({ isOpen, onClose, imag
     ro.observe(container);
     return () => ro.disconnect();
   }, [draw]);
-
-  // Cache the pixel data to avoid re-creating temp canvas on every mouse move
-  const pixelDataRef = useRef<ImageData | null>(null);
-  const pixelCanvasSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
-
-  useEffect(() => {
-    if (!imgLoaded || !imgRef.current) return;
-    const img = imgRef.current;
-    const tc = document.createElement('canvas');
-    tc.width = img.naturalWidth;
-    tc.height = img.naturalHeight;
-    const tctx = tc.getContext('2d')!;
-    tctx.drawImage(img, 0, 0);
-    pixelDataRef.current = tctx.getImageData(0, 0, tc.width, tc.height);
-    pixelCanvasSizeRef.current = { w: tc.width, h: tc.height };
-  }, [imgLoaded, imageDataUrl]);
 
   const getPixelColorFast = useCallback((clientX: number, clientY: number): string | null => {
     const canvas = canvasRef.current;
@@ -236,7 +281,23 @@ const EyedropperModal: React.FC<EyedropperModalProps> = ({ isOpen, onClose, imag
             <span className="text-sm font-semibold text-white">🎨 Eyedropper — Pick Colors from Image</span>
             <span className="text-xs text-gray-500">Click to pick • Scroll to zoom • Middle-drag to pan</span>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-lg px-2" aria-label="Close eyedropper">✕</button>
+          <div className="flex items-center gap-4">
+            {pixelatedImageUrl && (
+              <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Show the pixelated result instead of the original. Pick colors that actually appear in the output.">
+                <input
+                  type="checkbox"
+                  checked={previewPixelation}
+                  onChange={(e) => setPreviewPixelation(e.target.checked)}
+                  className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                />
+                <span className="text-xs text-gray-300">View current pixelation</span>
+              </label>
+            )}
+            {!pixelatedImageUrl && (
+              <span className="text-xs text-gray-600 italic">Run pixelation first to enable preview</span>
+            )}
+            <button onClick={onClose} className="text-gray-400 hover:text-white text-lg px-2" aria-label="Close eyedropper">✕</button>
+          </div>
         </div>
 
         {/* Body */}
@@ -254,9 +315,16 @@ const EyedropperModal: React.FC<EyedropperModalProps> = ({ isOpen, onClose, imag
               onContextMenu={(e) => e.preventDefault()}
             />
 
-            {/* Zoom indicator */}
-            <div className="absolute top-3 left-3 bg-gray-900/80 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 pointer-events-none">
-              {Math.round(zoom * 100)}%
+            {/* Zoom indicator + Reset Zoom button */}
+            <div className="absolute top-3 left-3 flex items-center gap-1">
+              <div className="bg-gray-900/80 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 pointer-events-none">
+                {Math.round(zoom * 100)}%
+              </div>
+              <button
+                onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+                className="bg-gray-900/80 border border-gray-700 rounded px-2 py-1 text-xs text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+                title="Reset zoom and pan"
+              >Reset</button>
             </div>
 
             {/* Hover tooltip */}

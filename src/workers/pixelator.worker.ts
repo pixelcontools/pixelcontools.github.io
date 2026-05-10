@@ -206,6 +206,20 @@ function deltaE_OKLab(a: OKLabColor, b: OKLabColor): number {
 // Alias for backward compat
 const getDeltaE = deltaE_CIE76;
 
+// --- sRGB <-> linear-light conversions (for gamma-correct error diffusion) ---
+// srgbToLinearF: 0..255 -> 0..1 linear
+// linearToSrgbF: 0..1 linear -> 0..255 sRGB
+function srgbToLinearF(c: number): number {
+  const x = c / 255;
+  return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+}
+function linearToSrgbF(l: number): number {
+  if (l <= 0) return 0;
+  if (l >= 1) return 255;
+  const v = l <= 0.0031308 ? 12.92 * l : 1.055 * Math.pow(l, 1 / 2.4) - 0.055;
+  return v * 255;
+}
+
 // --- Resizing ---
 
 function resampleNearest(srcData: ImageData, width: number, height: number): ImageData {
@@ -492,6 +506,15 @@ const errorKernels: Record<string, { dx: number, dy: number, f: number }[]> = {
     'atkinson': [
         { dx: 1, dy: 0, f: 1 / 8 }, { dx: 2, dy: 0, f: 1 / 8 }, { dx: -1, dy: 1, f: 1 / 8 },
         { dx: 0, dy: 1, f: 1 / 8 }, { dx: 1, dy: 1, f: 1 / 8 }, { dx: 0, dy: 2, f: 1 / 8 }
+    ],
+    'jarvis': [
+        { dx: 1, dy: 0, f: 7/48 }, { dx: 2, dy: 0, f: 5/48 },
+        { dx: -2, dy: 1, f: 3/48 }, { dx: -1, dy: 1, f: 5/48 }, { dx: 0, dy: 1, f: 7/48 }, { dx: 1, dy: 1, f: 5/48 }, { dx: 2, dy: 1, f: 3/48 },
+        { dx: -2, dy: 2, f: 1/48 }, { dx: -1, dy: 2, f: 3/48 }, { dx: 0, dy: 2, f: 5/48 }, { dx: 1, dy: 2, f: 3/48 }, { dx: 2, dy: 2, f: 1/48 }
+    ],
+    'shiau-fan': [
+        { dx: 1, dy: 0, f: 4/8 },
+        { dx: -2, dy: 1, f: 1/8 }, { dx: -1, dy: 1, f: 1/8 }, { dx: 0, dy: 1, f: 2/8 }
     ]
 };
 
@@ -573,6 +596,8 @@ function applyDithering(
   strength: number,
   colorMatchAlgorithm: ColorMatchAlgorithm = 'oklab',
   preserveDetailThreshold: number = 0,
+  serpentine: boolean = true,
+  gammaCorrect: boolean = false,
 ) {
     const pixels = imageData.data;
     const width = imageData.width;
@@ -586,6 +611,31 @@ function applyDithering(
     const colorCache = new Map<number, FindClosestResult>();
 
     const strengthFactor = strength / 100;
+
+    if (algorithm === 'blue-noise') {
+        // Interleaved Gradient Noise (Jorge Jimenez, 2014).
+        // Blue-noise-like spatial distribution with zero memory and zero precomputation.
+        const BASE_DITHER_STRENGTH = 64;
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const index = (y * width + x) * 4;
+                if (pixels[index + 3] < 128) { pixels[index + 3] = 0; continue; }
+                const ign = (52.9829189 * ((0.06711056 * x + 0.00583715 * y) % 1)) % 1;
+                const nudge = (ign - 0.5) * BASE_DITHER_STRENGTH * strengthFactor;
+                const oldColor = {
+                    r: Math.max(0, Math.min(255, pixels[index] + nudge)),
+                    g: Math.max(0, Math.min(255, pixels[index + 1] + nudge)),
+                    b: Math.max(0, Math.min(255, pixels[index + 2] + nudge)),
+                };
+                const { color: newColor } = findClosestColor(oldColor, paletteRGB, paletteLab, paletteOklab, colorMatchAlgorithm, preserveDetailThreshold, colorCache);
+                pixels[index] = newColor.r;
+                pixels[index + 1] = newColor.g;
+                pixels[index + 2] = newColor.b;
+                pixels[index + 3] = 255;
+            }
+        }
+        return;
+    }
 
     if (algorithm in ditherMatrices) {
         // Ordered Dithering
@@ -622,22 +672,58 @@ function applyDithering(
             }
         }
     } else {
-        // Error Diffusion
-        const pixelDataFloat = new Float32Array(pixels);
+        // Error Diffusion (with optional serpentine + linear-light gamma correction)
         const kernel = errorKernels[algorithm];
+        const useLinear = !!gammaCorrect;
+
+        // Working buffer in either sRGB (legacy) or linear-light space.
+        const buf = new Float32Array(pixels.length);
+        if (useLinear) {
+            for (let i = 0; i < pixels.length; i += 4) {
+                buf[i]     = srgbToLinearF(pixels[i]);
+                buf[i + 1] = srgbToLinearF(pixels[i + 1]);
+                buf[i + 2] = srgbToLinearF(pixels[i + 2]);
+                buf[i + 3] = pixels[i + 3];
+            }
+        } else {
+            buf.set(pixels);
+        }
+
+        // Pre-compute palette in linear space when needed (for error calculation only).
+        const paletteLinear: { r: number; g: number; b: number }[] | null = useLinear
+            ? paletteRGB.map(c => ({ r: srgbToLinearF(c.r), g: srgbToLinearF(c.g), b: srgbToLinearF(c.b) }))
+            : null;
 
         for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const index = (y * width + x) * 4;
-                if (pixelDataFloat[index + 3] < 128) { pixels[index + 3] = 0; continue; }
+            const reverse = serpentine && (y & 1) === 1;
+            const xStart = reverse ? width - 1 : 0;
+            const xEnd   = reverse ? -1 : width;
+            const xStep  = reverse ? -1 : 1;
 
-                const oldColor = { 
-                    r: pixelDataFloat[index], 
-                    g: pixelDataFloat[index + 1], 
-                    b: pixelDataFloat[index + 2] 
-                };
-                
-                const { color: newColor } = findClosestColor(oldColor, paletteRGB, paletteLab, paletteOklab, colorMatchAlgorithm, preserveDetailThreshold, colorCache);
+            for (let x = xStart; x !== xEnd; x += xStep) {
+                const index = (y * width + x) * 4;
+                if (buf[index + 3] < 128) { pixels[index + 3] = 0; continue; }
+
+                // Match against palette in sRGB so existing distance functions are reused.
+                let matchPixel: RGB;
+                if (useLinear) {
+                    matchPixel = {
+                        r: linearToSrgbF(buf[index]),
+                        g: linearToSrgbF(buf[index + 1]),
+                        b: linearToSrgbF(buf[index + 2]),
+                    };
+                } else {
+                    matchPixel = {
+                        r: buf[index],
+                        g: buf[index + 1],
+                        b: buf[index + 2],
+                    };
+                }
+
+                const { color: newColor, index: pIdx } = findClosestColor(
+                    matchPixel, paletteRGB, paletteLab, paletteOklab,
+                    colorMatchAlgorithm, preserveDetailThreshold, colorCache
+                );
 
                 pixels[index] = newColor.r;
                 pixels[index + 1] = newColor.g;
@@ -646,20 +732,28 @@ function applyDithering(
 
                 if (algorithm === 'none' || !kernel) continue;
 
-                const err = { 
-                    r: (oldColor.r - newColor.r) * strengthFactor, 
-                    g: (oldColor.g - newColor.g) * strengthFactor, 
-                    b: (oldColor.b - newColor.b) * strengthFactor 
-                };
+                // Compute residual error in working space.
+                let er: number, eg: number, eb: number;
+                if (useLinear) {
+                    const lp = paletteLinear![pIdx];
+                    er = (buf[index]     - lp.r) * strengthFactor;
+                    eg = (buf[index + 1] - lp.g) * strengthFactor;
+                    eb = (buf[index + 2] - lp.b) * strengthFactor;
+                } else {
+                    er = (buf[index]     - newColor.r) * strengthFactor;
+                    eg = (buf[index + 1] - newColor.g) * strengthFactor;
+                    eb = (buf[index + 2] - newColor.b) * strengthFactor;
+                }
 
                 for (const k of kernel) {
-                    const nX = x + k.dx, nY = y + k.dy;
+                    const kdx = reverse ? -k.dx : k.dx;
+                    const nX = x + kdx, nY = y + k.dy;
                     if (nX >= 0 && nX < width && nY >= 0 && nY < height) {
                         const i2 = (nY * width + nX) * 4;
-                        if (pixelDataFloat[i2 + 3] < 128) continue;
-                        pixelDataFloat[i2] += err.r * k.f;
-                        pixelDataFloat[i2 + 1] += err.g * k.f;
-                        pixelDataFloat[i2 + 2] += err.b * k.f;
+                        if (buf[i2 + 3] < 128) continue;
+                        buf[i2]     += er * k.f;
+                        buf[i2 + 1] += eg * k.f;
+                        buf[i2 + 2] += eb * k.f;
                     }
                 }
             }
@@ -929,54 +1023,10 @@ function applyColorModifiers(imageData: ImageData, brightness: number, contrast:
 
 // --- Preprocessing Filters ---
 
-// 1. Median Filter: excellent for removing noise/dithering while keeping edges sharp
-function applyMedianFilter(imageData: ImageData, strength: number): ImageData {
-  const src = imageData.data;
-  const width = imageData.width;
-  const height = imageData.height;
-  const dest = new ImageData(new Uint8ClampedArray(src), width, height);
-  const destData = dest.data;
-
-  // Map strength 0-100 to radius 1-10
-  const radius = Math.max(1, Math.floor((strength / 100) * 10)); 
-  
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4;
-      
-      const rValues = [];
-      const gValues = [];
-      const bValues = [];
-
-      for (let ky = -radius; ky <= radius; ky++) {
-        for (let kx = -radius; kx <= radius; kx++) {
-          const py = Math.min(height - 1, Math.max(0, y + ky));
-          const px = Math.min(width - 1, Math.max(0, x + kx));
-          const pIdx = (py * width + px) * 4;
-          
-          rValues.push(src[pIdx]);
-          gValues.push(src[pIdx+1]);
-          bValues.push(src[pIdx+2]);
-        }
-      }
-
-      rValues.sort((a, b) => a - b);
-      gValues.sort((a, b) => a - b);
-      bValues.sort((a, b) => a - b);
-
-      const mid = Math.floor(rValues.length / 2);
-
-      destData[idx] = rValues[mid];
-      destData[idx + 1] = gValues[mid];
-      destData[idx + 2] = bValues[mid];
-      destData[idx + 3] = src[idx + 3];
-    }
-  }
-  return dest;
-}
-
-// 2. Bilateral Filter: Blurs similar colors
+// Bilateral Filter: Blurs similar colors while preserving edges
 function applyBilateralFilter(imageData: ImageData, strength: number): ImageData {
+  if (strength <= 0) return imageData; // true no-op at 0%
+
   const src = imageData.data;
   const width = imageData.width;
   const height = imageData.height;
@@ -1044,88 +1094,84 @@ function applyBilateralFilter(imageData: ImageData, strength: number): ImageData
   return dest;
 }
 
-// 3. Kuwahara Filter: The "Oil Paint" effect, critical for pixel art clustering
-function applyKuwaharaFilter(imageData: ImageData, strength: number): ImageData {
-  const src = imageData.data;
-  const width = imageData.width;
-  const height = imageData.height;
-  const dest = new ImageData(new Uint8ClampedArray(src), width, height);
-  const destData = dest.data;
-  
-  // Revised mapping: Radius 2 to 14. 
-  // Small radii (2-4) are barely visible on large images. 
-  // Large radii (10+) create the distinct "flat" look.
-  const radius = Math.max(2, Math.floor((strength / 100) * 14));
-  
-  // Pre-calculate integral images could optimize this, but for now we stick to direct logic for clarity
-  
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4;
-      if (src[idx+3] === 0) continue;
+// --- Unsharp Mask (Sharpening) ---
 
-      let minVariance = Infinity;
-      let bestMean = { r: src[idx], g: src[idx+1], b: src[idx+2] };
-      
-      // The 4 sub-quadrants
-      const ranges = [
-          [ -radius, 0, -radius, 0 ], // TL
-          [ 0, radius, -radius, 0 ],  // TR
-          [ -radius, 0, 0, radius ],  // BL
-          [ 0, radius, 0, radius ]    // BR
-      ];
+function applySharpening(imageData: ImageData, strength: number): ImageData {
+    if (strength <= 0) return imageData;
+    // strength range is 1–300. Scale to amount: 1→0.04, 100→1.5, 300→4.5
+    const amount = (strength / 100) * 1.5;
+    const src = imageData.data;
+    const w = imageData.width;
+    const h = imageData.height;
+    const dest = new ImageData(new Uint8ClampedArray(src), w, h);
+    const d = dest.data;
 
-      for (let i = 0; i < 4; i++) {
-          const [xStart, xEnd, yStart, yEnd] = ranges[i];
-          let rSum = 0, gSum = 0, bSum = 0;
-          let rSqSum = 0, gSqSum = 0, bSqSum = 0;
-          let count = 0;
-
-          for (let dy = yStart; dy <= yEnd; dy++) {
-              const ny = y + dy;
-              if (ny < 0 || ny >= height) continue;
-              
-              for (let dx = xStart; dx <= xEnd; dx++) {
-                  const nx = x + dx;
-                  if (nx < 0 || nx >= width) continue;
-
-                  const pIdx = (ny * width + nx) * 4;
-                  const r = src[pIdx];
-                  const g = src[pIdx+1];
-                  const b = src[pIdx+2];
-
-                  rSum += r; gSum += g; bSum += b;
-                  rSqSum += r*r; gSqSum += g*g; bSqSum += b*b;
-                  count++;
-              }
-          }
-
-          if (count === 0) continue;
-
-          const meanR = rSum / count;
-          const meanG = gSum / count;
-          const meanB = bSum / count;
-          
-          const variance = (rSqSum + gSqSum + bSqSum) / count - (meanR*meanR + meanG*meanG + meanB*meanB);
-
-          if (variance < minVariance) {
-              minVariance = variance;
-              bestMean = { r: meanR, g: meanG, b: meanB };
-          }
-      }
-
-      destData[idx] = bestMean.r;
-      destData[idx + 1] = bestMean.g;
-      destData[idx + 2] = bestMean.b;
-      destData[idx + 3] = src[idx + 3];
+    // 3×3 box blur for the "blur" term in unsharp mask
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const idx = (y * w + x) * 4;
+            d[idx + 3] = src[idx + 3];
+            if (src[idx + 3] < 128) { d[idx] = src[idx]; d[idx+1] = src[idx+1]; d[idx+2] = src[idx+2]; continue; }
+            for (let c = 0; c < 3; c++) {
+                let blurSum = 0, blurCount = 0;
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const ny = y + dy, nx = x + dx;
+                        if (ny < 0 || ny >= h || nx < 0 || nx >= w) continue;
+                        blurSum += src[(ny * w + nx) * 4 + c];
+                        blurCount++;
+                    }
+                }
+                const blurred = blurSum / blurCount;
+                d[idx + c] = Math.min(255, Math.max(0, Math.round(src[idx + c] + amount * (src[idx + c] - blurred))));
+            }
+        }
     }
-  }
-  return dest;
+    return dest;
+}
+
+// --- Vibrance ---
+
+function applyVibrance(imageData: ImageData, strength: number): ImageData {
+    // Vibrance selectively boosts saturation of less-saturated colors.
+    // strength: -100 to +100 (negative = reduce vibrance)
+    if (strength === 0) return imageData;
+    const amount = strength / 100;
+    const src = imageData.data;
+    const w = imageData.width;
+    const h = imageData.height;
+    const dest = new ImageData(new Uint8ClampedArray(src), w, h);
+    const d = dest.data;
+
+    for (let i = 0; i < w * h; i++) {
+        const o = i * 4;
+        if (src[o + 3] < 128) { d[o] = src[o]; d[o+1] = src[o+1]; d[o+2] = src[o+2]; d[o+3] = src[o+3]; continue; }
+        const r = src[o] / 255;
+        const g = src[o+1] / 255;
+        const b = src[o+2] / 255;
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const sat = max === 0 ? 0 : (max - min) / max; // simple HSV saturation
+        // Weight: boost low-sat colors more (1 - sat = unsaturated fraction)
+        const weight = (1 - sat) * Math.abs(amount);
+        const boost = amount > 0 ? 1 + weight : 1 - weight;
+        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        d[o]   = Math.min(255, Math.max(0, Math.round((lum + (r - lum) * boost) * 255)));
+        d[o+1] = Math.min(255, Math.max(0, Math.round((lum + (g - lum) * boost) * 255)));
+        d[o+2] = Math.min(255, Math.max(0, Math.round((lum + (b - lum) * boost) * 255)));
+        d[o+3] = src[o+3];
+    }
+    return dest;
 }
 
 // --- Edge Detection Preprocessing ---
 
-function applyEdgeDetection(imageData: ImageData, strength: number, blurRadius: number, algorithm: string): ImageData {
+function applyEdgeDetection(imageData: ImageData, strengthLevel: number, _unusedBlur: number, algorithm: string): ImageData {
+  // strengthLevel: 0 = no effect, 1-10 mapped to 10%-100% blend.
+  // Always pre-blurs with 1px Gaussian internally for clean edge detection.
+  if (strengthLevel <= 0) return imageData; // true no-op at far left
+
+  const blendFactor = Math.min(1, (strengthLevel / 10) * 0.9); // 0.09 – 0.9
   const src = imageData.data;
   const width = imageData.width;
   const height = imageData.height;
@@ -1141,21 +1187,19 @@ function applyEdgeDetection(imageData: ImageData, strength: number, blurRadius: 
     }
   }
 
-  // Apply Gaussian blur before edge detection to suppress noise
-  if (blurRadius > 0) {
-    const radius = Math.max(1, Math.round(blurRadius));
-    const sigma = radius / 2;
-    const kernelSize = radius * 2 + 1;
+  // Always apply 1px Gaussian pre-blur for noise suppression
+  {
+    const radius = 1;
+    const sigma = 0.5;
+    const kernelSize = 3;
     const kernel = new Float32Array(kernelSize);
     let kernelSum = 0;
     for (let i = 0; i < kernelSize; i++) {
-      const x = i - radius;
-      kernel[i] = Math.exp(-(x * x) / (2 * sigma * sigma));
+      const xi = i - radius;
+      kernel[i] = Math.exp(-(xi * xi) / (2 * sigma * sigma));
       kernelSum += kernel[i];
     }
     for (let i = 0; i < kernelSize; i++) kernel[i] /= kernelSum;
-
-    // Separable Gaussian: horizontal pass
     const temp = new Float32Array(width * height);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -1167,7 +1211,6 @@ function applyEdgeDetection(imageData: ImageData, strength: number, blurRadius: 
         temp[y * width + x] = sum;
       }
     }
-    // Vertical pass
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         let sum = 0;
@@ -1236,8 +1279,6 @@ function applyEdgeDetection(imageData: ImageData, strength: number, blurRadius: 
   allMags.sort((a, b) => a - b);
   const normFactor = allMags.length > 0 ? allMags[Math.floor(allMags.length * 0.95)] : 1;
   if (normFactor === 0) return dest;
-
-  const blendFactor = strength / 100;
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -1736,6 +1777,206 @@ function pixeloeKCentroidDownscale(imageData: ImageData, targetW: number, target
   return dest;
 }
 
+// --- Outline Color Consistency (post-quantization pass) ---
+
+/**
+ * Detects dark contour/edge pixels in an already-quantized image and
+ * unifies them to the most-dominant palette colors that naturally appear
+ * on those edges. Works after any downscaler.
+ *
+ * Key design: after dithering, every pixel is already a palette color.
+ * Instead of re-clustering in color space (which produces averages that
+ * can snap inconsistently to far-away palette entries), we:
+ *   1. Detect outline pixels by luminance-contrast in the 3×3 neighborhood.
+ *   2. Tally which palette colors are already most frequent on those pixels.
+ *   3. Keep only the top N colors by frequency — no averaging, no centroids.
+ *   4. Snap each outline pixel to its nearest of those N colors (OKLab dist).
+ *
+ * Result is deterministic and consistent: the outline color is always the
+ * palette entry that already dominates the edge region.
+ */
+function applyOutlineConsistency(
+    imageData: ImageData,
+    paletteHex: string[],
+    colorCount: number,
+): void {
+    const w = imageData.width;
+    const h = imageData.height;
+    const data = imageData.data;
+    const total = w * h;
+    if (colorCount < 1 || total < 4 || paletteHex.length === 0) return;
+
+    // Step 1: compute per-pixel luminance for edge detection.
+    const luma = new Float32Array(total);
+    for (let i = 0; i < total; i++) {
+        const o = i * 4;
+        if (data[o + 3] < 128) { luma[i] = -1; continue; }
+        luma[i] = 0.299 * data[o] + 0.587 * data[o + 1] + 0.114 * data[o + 2];
+    }
+
+    // Step 2: classify outline pixels.
+    // A pixel is an "outline" if it sits on a high-contrast edge (max-min luma
+    // in its 3×3 neighborhood ≥ threshold) AND is darker than the neighborhood mean.
+    const isOutline = new Uint8Array(total);
+    const EDGE_CONTRAST = 40;  // min max-min luma in 3×3 to count as an edge
+    const DARK_OFFSET   = 20;  // pixel must be ≥ this much below 3×3 mean
+    for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+            const p = y * w + x;
+            const self = luma[p];
+            if (self < 0) continue;
+            let mn = 255, mx = 0, sum = 0, cnt = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const nl = luma[p + dy * w + dx];
+                    if (nl < 0) continue;
+                    if (nl < mn) mn = nl;
+                    if (nl > mx) mx = nl;
+                    sum += nl; cnt++;
+                }
+            }
+            if (cnt === 0) continue;
+            if ((mx - mn) >= EDGE_CONTRAST && self <= (sum / cnt) - DARK_OFFSET) {
+                isOutline[p] = 1;
+            }
+        }
+    }
+
+    // Step 3: tally which palette colors already appear on outline pixels.
+    // Build a fast packed-RGB → palette-index lookup.
+    const paletteRGB = paletteHex.map(hexToRgb);
+    const paletteOklab = paletteRGB.map(rgbToOklab);
+    const lookup = new Map<number, number>();
+    for (let p = 0; p < paletteRGB.length; p++) {
+        const c = paletteRGB[p];
+        lookup.set((c.r << 16) | (c.g << 8) | c.b, p);
+    }
+
+    const freq = new Int32Array(paletteRGB.length);
+    let outlineCount = 0;
+    for (let i = 0; i < total; i++) {
+        if (!isOutline[i]) continue;
+        const o = i * 4;
+        const key = (data[o] << 16) | (data[o + 1] << 8) | data[o + 2];
+        const pIdx = lookup.get(key);
+        if (pIdx !== undefined) freq[pIdx]++;
+        outlineCount++;
+    }
+    if (outlineCount === 0) return;
+
+    // Step 4: select the top N palette colors by frequency.
+    const k = Math.min(colorCount, paletteRGB.length);
+    const ranked = Array.from({ length: paletteRGB.length }, (_, i) => i)
+        .filter(i => freq[i] > 0)
+        .sort((a, b) => freq[b] - freq[a])
+        .slice(0, k);
+    if (ranked.length === 0) return;
+
+    const allowedOklab = ranked.map(i => paletteOklab[i]);
+    const allowedRGB   = ranked.map(i => paletteRGB[i]);
+
+    // Step 5: snap each outline pixel to its nearest allowed color (OKLab).
+    for (let i = 0; i < total; i++) {
+        if (!isOutline[i]) continue;
+        const o = i * 4;
+        const pixOk = rgbToOklab({ r: data[o], g: data[o + 1], b: data[o + 2] });
+        let best = 0, bestD = Infinity;
+        for (let c = 0; c < allowedOklab.length; c++) {
+            const ao = allowedOklab[c];
+            const dL = pixOk.L - ao.L, da = pixOk.a - ao.a, db = pixOk.b - ao.b;
+            const d = dL * dL + da * da + db * db;
+            if (d < bestD) { bestD = d; best = c; }
+        }
+        const col = allowedRGB[best];
+        data[o] = col.r; data[o + 1] = col.g; data[o + 2] = col.b;
+    }
+}
+
+// --- Cluster Cleanup (post-quantization) ---
+
+/**
+ * Finds connected same-color regions smaller than minSize pixels and
+ * repaints them with the dominant neighboring color.
+ * Runs on the already-quantized (palette-reduced) image.
+ */
+function applyClusterCleanup(imageData: ImageData, minSize: number): void {
+    if (minSize <= 1) return;
+    const w = imageData.width;
+    const h = imageData.height;
+    const data = imageData.data;
+    const total = w * h;
+
+    // Pack RGB into int32 (-1 = transparent)
+    const packed = new Int32Array(total);
+    for (let i = 0; i < total; i++) {
+        const o = i * 4;
+        packed[i] = data[o + 3] < 128 ? -1 : (data[o] << 16) | (data[o + 1] << 8) | data[o + 2];
+    }
+
+    const labels = new Int32Array(total).fill(-1);
+    const compColor: number[] = [];
+    const compPixels: number[][] = [];
+    let nextLabel = 0;
+
+    // BFS flood-fill to label connected regions
+    const queue: number[] = [];
+    for (let start = 0; start < total; start++) {
+        if (packed[start] < 0 || labels[start] >= 0) continue;
+        const color = packed[start];
+        const label = nextLabel++;
+        compColor.push(color);
+        const pixels: number[] = [];
+        queue.length = 0;
+        queue.push(start);
+        labels[start] = label;
+        let qi = 0;
+        while (qi < queue.length) {
+            const p = queue[qi++];
+            pixels.push(p);
+            const x = p % w;
+            const y = (p - x) / w;
+            if (x > 0     && labels[p - 1] < 0 && packed[p - 1] === color) { labels[p - 1] = label; queue.push(p - 1); }
+            if (x < w - 1 && labels[p + 1] < 0 && packed[p + 1] === color) { labels[p + 1] = label; queue.push(p + 1); }
+            if (y > 0     && labels[p - w] < 0 && packed[p - w] === color) { labels[p - w] = label; queue.push(p - w); }
+            if (y < h - 1 && labels[p + w] < 0 && packed[p + w] === color) { labels[p + w] = label; queue.push(p + w); }
+        }
+        compPixels.push(pixels);
+    }
+
+    // Repaint small components with dominant neighbor color
+    for (let l = 0; l < nextLabel; l++) {
+        const pixels = compPixels[l];
+        if (pixels.length >= minSize) continue;
+
+        const neighborFreq = new Map<number, number>();
+        for (const p of pixels) {
+            const x = p % w;
+            const y = (p - x) / w;
+            const neighbors = [p - 1, p + 1, p - w, p + w];
+            const inBounds  = [x > 0, x < w - 1, y > 0, y < h - 1];
+            for (let n = 0; n < 4; n++) {
+                if (!inBounds[n]) continue;
+                const np = neighbors[n];
+                if (labels[np] === l || packed[np] < 0) continue;
+                neighborFreq.set(packed[np], (neighborFreq.get(packed[np]) ?? 0) + 1);
+            }
+        }
+        if (neighborFreq.size === 0) continue;
+
+        let bestColor = compColor[l], bestCount = 0;
+        for (const [c, count] of neighborFreq) {
+            if (count > bestCount) { bestCount = count; bestColor = c; }
+        }
+
+        for (const p of pixels) {
+            const o = p * 4;
+            data[o]   = (bestColor >> 16) & 0xff;
+            data[o+1] = (bestColor >> 8)  & 0xff;
+            data[o+2] =  bestColor         & 0xff;
+        }
+    }
+}
+
 // --- Main Handler ---
 
 self.onmessage = async (e: MessageEvent) => {
@@ -1753,7 +1994,7 @@ self.onmessage = async (e: MessageEvent) => {
         return;
     }
 
-    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, preprocessingMethod, preprocessingStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT, pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm, samplingMask, samplingMaskWidth, samplingMaskHeight } = settings;
+    const { targetWidth, targetHeight, ditherMethod, ditherStrength, palette, resamplingMethod, useKmeans, kmeansColors, brightness, contrast, saturation, vibrance, preprocessBilateral, preprocessBilateralStrength, preprocessEdgeDetect, preprocessSharpening, preprocessSharpeningStrength, filterTrivialColors, trivialThreshold, trivialThresholdMode, colorMatchAlgorithm: rawAlgo, preserveDetailThreshold: rawPDT, pixeloeThickness, pixeloePatchSize, edgeDetectBlur, edgeDetectAlgorithm, samplingMask, samplingMaskWidth, samplingMaskHeight, serpentineDither, gammaCorrectDither, outlineConsistency, outlineColors, clusterCleanup, clusterMinSize } = settings;
     const colorMatchAlgorithm: ColorMatchAlgorithm = rawAlgo || 'oklab';
     const preserveDetailThreshold: number = rawPDT || 0;
 
@@ -1766,21 +2007,19 @@ self.onmessage = async (e: MessageEvent) => {
         if ((brightness && brightness !== 0) || (contrast && contrast !== 0) || (saturation && saturation !== 0)) {
             processedImageData = applyColorModifiers(imageData, brightness || 0, contrast || 0, saturation || 0);
         }
+        if (vibrance && vibrance !== 0) {
+            processedImageData = applyVibrance(processedImageData, vibrance);
+        }
 
-        // 0.5. Apply Preprocessing Filters
-        // Filters now use improved "Radius" mapping based on strength
-        if (preprocessingMethod && preprocessingMethod !== 'none') {
-            const strength = preprocessingStrength || 50;
-            
-            if (preprocessingMethod === 'median') {
-                processedImageData = applyMedianFilter(processedImageData, strength);
-            } else if (preprocessingMethod === 'bilateral') {
-                processedImageData = applyBilateralFilter(processedImageData, strength);
-            } else if (preprocessingMethod === 'kuwahara') {
-                processedImageData = applyKuwaharaFilter(processedImageData, strength);
-            } else if (preprocessingMethod === 'edge-detect') {
-                processedImageData = applyEdgeDetection(processedImageData, strength, edgeDetectBlur || 0, edgeDetectAlgorithm || 'sobel');
-            }
+        // 0.5. Apply Preprocessing Filters (multiple can be active)
+        if (preprocessSharpening) {
+            processedImageData = applySharpening(processedImageData, preprocessSharpeningStrength || 50);
+        }
+        if (preprocessBilateral) {
+            processedImageData = applyBilateralFilter(processedImageData, preprocessBilateralStrength || 50);
+        }
+        if (preprocessEdgeDetect) {
+            processedImageData = applyEdgeDetection(processedImageData, edgeDetectBlur || 0, 0, edgeDetectAlgorithm || 'sobel');
         }
 
         // ... [Rest of logic: Resize -> Kmeans -> Dither remains exactly the same] ...
@@ -1901,7 +2140,26 @@ self.onmessage = async (e: MessageEvent) => {
 
         // 3. Dither
         if (effectivePalette && effectivePalette.length > 0) {
-            applyDithering(resizedImageData, effectivePalette, ditherMethod, ditherStrength, colorMatchAlgorithm, preserveDetailThreshold);
+            applyDithering(
+                resizedImageData, effectivePalette, ditherMethod, ditherStrength,
+                colorMatchAlgorithm, preserveDetailThreshold,
+                serpentineDither !== false, // default true
+                !!gammaCorrectDither,
+            );
+        }
+
+        // 4. Outline color consistency
+        if (
+            outlineConsistency &&
+            effectivePalette && effectivePalette.length > 0 &&
+            outlineColors && outlineColors > 0
+        ) {
+            applyOutlineConsistency(resizedImageData, effectivePalette, outlineColors | 0);
+        }
+
+        // 5. Cluster Cleanup — remove small isolated color regions
+        if (clusterCleanup && clusterMinSize && clusterMinSize > 1) {
+            applyClusterCleanup(resizedImageData, clusterMinSize);
         }
 
         self.postMessage({ type: 'success', imageData: resizedImageData, generatedPalette });
