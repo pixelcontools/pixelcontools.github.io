@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import DraggableModal from './DraggableModal';
 import { applyTransparencyMask } from '../../utils/imageProcessing';
 import useCompositorStore from '../../store/compositorStore';
@@ -22,11 +22,25 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [useTemplatePalette, setUseTemplatePalette] = useState<boolean>(true);
   const [hasInitialFit, setHasInitialFit] = useState<boolean>(false);
+  const [pinFitToScreen, setPinFitToScreen] = useState<boolean>(true);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const previewPanRef = useRef<{ startX: number; startY: number; startScrollLeft: number; startScrollTop: number } | null>(null);
   const updateLayer = useCompositorStore((state) => state.updateLayer);
   const layers = useCompositorStore((state) => state.project.layers);
   const cropCanvasToLayers = useCompositorStore((state) => state.cropCanvasToLayers);
+
+  const previewPadding = 20;
+  const minZoom = 0.1;
+  const maxZoom = 20;
+
+  useEffect(() => {
+    if (!isOpen || !layer.imageData) return;
+    setPreviewImage(null);
+    setImageDimensions(null);
+    setZoom(1);
+    setHasInitialFit(false);
+  }, [isOpen, layer.id, layer.imageData]);
 
   useEffect(() => {
     if (!isOpen || !layer.imageData) return;
@@ -43,7 +57,6 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
       }
     }, 100);
 
-    setHasInitialFit(false);
     return () => clearTimeout(timer);
   }, [threshold, layer.imageData, isOpen]);
 
@@ -63,36 +76,103 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
     }
   };
 
-  const handleZoomIn = () => {
-    setZoom((prev) => Math.min(prev + 0.25, 3));
-  };
-
-  const handleZoomOut = () => {
-    setZoom((prev) => Math.max(prev - 0.25, 0.1));
-  };
-
-  const calculateFitZoom = (width: number, height: number) => {
+  const calculateFitZoom = useCallback((width: number, height: number) => {
     if (!previewContainerRef.current) return 1;
     
     const containerWidth = previewContainerRef.current.clientWidth;
     const containerHeight = previewContainerRef.current.clientHeight;
+    const availableWidth = containerWidth - previewPadding * 2;
+    const availableHeight = containerHeight - previewPadding * 2;
     
-    if (containerWidth <= 0 || containerHeight <= 0) return 1;
+    if (availableWidth <= 0 || availableHeight <= 0) return 1;
 
-    const scaleX = containerWidth / width;
-    const scaleY = containerHeight / height;
+    const scaleX = availableWidth / width;
+    const scaleY = availableHeight / height;
     
     const newZoom = Math.min(scaleX, scaleY);
-    return Math.max(0.1, newZoom * 0.9);
+    return Math.max(minZoom, newZoom);
+  }, []);
+
+  const zoomAtPoint = useCallback((updater: (previousZoom: number) => number, origin?: { x: number; y: number }) => {
+    setZoom((previousZoom) => {
+      const nextZoom = updater(previousZoom);
+      const container = previewContainerRef.current;
+      if (!container) return nextZoom;
+
+      const viewportX = origin?.x ?? container.clientWidth / 2;
+      const viewportY = origin?.y ?? container.clientHeight / 2;
+      const imageX = (container.scrollLeft + viewportX - previewPadding) / previousZoom;
+      const imageY = (container.scrollTop + viewportY - previewPadding) / previousZoom;
+
+      requestAnimationFrame(() => {
+        const currentContainer = previewContainerRef.current;
+        if (!currentContainer) return;
+        currentContainer.scrollLeft = imageX * nextZoom + previewPadding - viewportX;
+        currentContainer.scrollTop = imageY * nextZoom + previewPadding - viewportY;
+      });
+
+      return nextZoom;
+    });
+  }, []);
+
+  const handleZoomIn = () => {
+    zoomAtPoint((previousZoom) => Math.min(previousZoom + 0.5, maxZoom));
   };
 
-  const handleResetZoom = () => {
+  const handleZoomOut = () => {
+    zoomAtPoint((previousZoom) => Math.max(previousZoom - 0.5, minZoom));
+  };
+
+  const handleFitToScreen = useCallback(() => {
     if (imageDimensions) {
       setZoom(calculateFitZoom(imageDimensions.width, imageDimensions.height));
-    } else {
-      setZoom(1);
     }
+  }, [imageDimensions, calculateFitZoom]);
+
+  const handleResetZoom = () => {
+    zoomAtPoint(() => 1);
   };
+
+  const handlePreviewMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 1) return;
+    const container = previewContainerRef.current;
+    if (!container) return;
+    e.preventDefault();
+    previewPanRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startScrollLeft: container.scrollLeft,
+      startScrollTop: container.scrollTop,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const panState = previewPanRef.current;
+      const currentContainer = previewContainerRef.current;
+      if (!panState || !currentContainer) return;
+      currentContainer.scrollLeft = panState.startScrollLeft - (moveEvent.clientX - panState.startX);
+      currentContainer.scrollTop = panState.startScrollTop - (moveEvent.clientY - panState.startY);
+    };
+
+    const handleMouseUp = () => {
+      previewPanRef.current = null;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  const handlePreviewWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const container = previewContainerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    zoomAtPoint(
+      (previousZoom) => Math.max(minZoom, Math.min(maxZoom, previousZoom * (e.deltaY < 0 ? 1.15 : 0.87))),
+      { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    );
+  }, [zoomAtPoint]);
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
@@ -110,7 +190,13 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
         setHasInitialFit(true);
       }, 100);
     }
-  }, [imageDimensions, hasInitialFit]);
+  }, [imageDimensions, hasInitialFit, calculateFitZoom]);
+
+  useEffect(() => {
+    if (pinFitToScreen && hasInitialFit) {
+      handleFitToScreen();
+    }
+  }, [pinFitToScreen, imageDimensions, hasInitialFit, handleFitToScreen]);
 
   return (
     <DraggableModal isOpen={isOpen} title="Transparency Mask" onClose={onClose} modalId="modal-transparency-mask">
@@ -118,12 +204,24 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
         {/* Preview Container with Zoom and Scroll */}
         <div className="flex-1 flex flex-col min-h-0 gap-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">Preview</label>
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium">Preview</label>
+              <label className="flex items-center gap-1 cursor-pointer" title="Always fit preview after the mask updates">
+                <input
+                  type="checkbox"
+                  checked={pinFitToScreen}
+                  onChange={(e) => setPinFitToScreen(e.target.checked)}
+                  className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                />
+                <span className="text-xs text-gray-400 select-none">Pin Fit</span>
+              </label>
+              <span className="text-xs text-gray-500 hidden sm:inline">Scroll to zoom • Middle-drag to pan</span>
+            </div>
             <div className="flex items-center gap-2">
               <button
                 id="btn-tmask-zoom-out"
                 onClick={handleZoomOut}
-                disabled={zoom <= 0.1}
+                disabled={zoom <= minZoom}
                 className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 title="Zoom out"
                 aria-label="Zoom out"
@@ -138,7 +236,7 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
               <button
                 id="btn-tmask-zoom-in"
                 onClick={handleZoomIn}
-                disabled={zoom >= 3}
+                disabled={zoom >= maxZoom}
                 className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 title="Zoom in"
                 aria-label="Zoom in"
@@ -146,6 +244,15 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
                 </svg>
+              </button>
+              <button
+                id="btn-tmask-zoom-fit"
+                onClick={handleFitToScreen}
+                className="text-xs px-2 py-1 text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                title="Fit to screen"
+                aria-label="Fit preview to screen"
+              >
+                Fit
               </button>
               <button
                 id="btn-tmask-zoom-reset"
@@ -161,6 +268,9 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
           <div
             ref={previewContainerRef}
             className="flex-1 relative w-full bg-gray-900 rounded border border-gray-700 overflow-auto"
+            onMouseDown={handlePreviewMouseDown}
+            onAuxClick={(e) => { if (e.button === 1) e.preventDefault(); }}
+            onWheel={handlePreviewWheel}
           >
             {isProcessing && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
@@ -171,7 +281,7 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
               <div 
                 style={{
                   display: 'inline-block',
-                  padding: '10px',
+                  padding: `${previewPadding}px`,
                 }}
               >
                 <img
@@ -182,8 +292,8 @@ const TransparencyMaskModal: React.FC<TransparencyMaskModalProps> = ({
                   style={{
                     width: imageDimensions ? `${imageDimensions.width * zoom}px` : 'auto',
                     height: imageDimensions ? `${imageDimensions.height * zoom}px` : 'auto',
-                    transition: 'width 0.1s ease-out, height 0.1s ease-out',
                     maxWidth: 'none',
+                    imageRendering: 'pixelated',
                   }}
                 />
               </div>

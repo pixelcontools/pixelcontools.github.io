@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import DraggableModal from './DraggableModal';
 import useCompositorStore from '../../store/compositorStore';
 import { Layer } from '../../types/compositor.types';
@@ -10,6 +10,9 @@ interface CropModalProps {
 }
 
 const MIN_SIZE = 5;
+const PREVIEW_PADDING = 20;
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 20;
 
 const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
   const updateLayer = useCompositorStore((s) => s.updateLayer);
@@ -25,6 +28,7 @@ const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
   const imgContainerRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const previewBoxRef = useRef<HTMLDivElement | null>(null);
+  const previewPanRef = useRef<{ startX: number; startY: number; startScrollLeft: number; startScrollTop: number } | null>(null);
   const stateRef = useRef<{ cropRect: any; zoom: number; imageDimensions: any; isDragging: boolean }>({
     cropRect: null,
     zoom: 1,
@@ -53,21 +57,22 @@ const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
     setCropRect({ x: 0, y: 0, width: dims.width, height: dims.height });
   };
 
-  const calculateFitZoom = (width: number, height: number) => {
+  const calculateFitZoom = useCallback((width: number, height: number) => {
     if (!previewBoxRef.current) return 1;
     
     const containerWidth = previewBoxRef.current.clientWidth;
     const containerHeight = previewBoxRef.current.clientHeight;
+    const availableWidth = containerWidth - PREVIEW_PADDING * 2;
+    const availableHeight = containerHeight - PREVIEW_PADDING * 2;
     
-    if (containerWidth <= 0 || containerHeight <= 0) return 1;
+    if (availableWidth <= 0 || availableHeight <= 0) return 1;
 
-    const scaleX = containerWidth / width;
-    const scaleY = containerHeight / height;
+    const scaleX = availableWidth / width;
+    const scaleY = availableHeight / height;
     
     const newZoom = Math.min(scaleX, scaleY);
-    // Scale down slightly to ensure there's a bit of breathing room
-    return Math.max(0.1, newZoom * 0.9);
-  };
+    return Math.max(MIN_ZOOM, newZoom);
+  }, []);
 
   useEffect(() => {
     if (imageDimensions && previewBoxRef.current && !hasInitialFit) {
@@ -77,9 +82,10 @@ const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
         setHasInitialFit(true);
       }, 100);
     }
-  }, [imageDimensions, hasInitialFit]);
+  }, [imageDimensions, hasInitialFit, calculateFitZoom]);
 
   const handleMouseDown = (e: React.MouseEvent, dragType: 'move' | 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w') => {
+    if (e.button !== 0) return;
     e.preventDefault();
     if (!imgRef.current || !stateRef.current.cropRect || !stateRef.current.imageDimensions) return;
 
@@ -139,15 +145,77 @@ const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
     document.addEventListener('mouseup', handleMouseUp);
   };
 
-  const handleZoomIn = () => setZoom((z) => Math.min(5, z + 0.25));
-  const handleZoomOut = () => setZoom((z) => Math.max(0.1, z - 0.25));
-  const handleResetZoom = () => {
+  const zoomAtPoint = useCallback((updater: (previousZoom: number) => number, origin?: { x: number; y: number }) => {
+    setZoom((previousZoom) => {
+      const nextZoom = updater(previousZoom);
+      const container = previewBoxRef.current;
+      if (!container) return nextZoom;
+
+      const viewportX = origin?.x ?? container.clientWidth / 2;
+      const viewportY = origin?.y ?? container.clientHeight / 2;
+      const imageX = (container.scrollLeft + viewportX - PREVIEW_PADDING) / previousZoom;
+      const imageY = (container.scrollTop + viewportY - PREVIEW_PADDING) / previousZoom;
+
+      requestAnimationFrame(() => {
+        const currentContainer = previewBoxRef.current;
+        if (!currentContainer) return;
+        currentContainer.scrollLeft = imageX * nextZoom + PREVIEW_PADDING - viewportX;
+        currentContainer.scrollTop = imageY * nextZoom + PREVIEW_PADDING - viewportY;
+      });
+
+      return nextZoom;
+    });
+  }, []);
+
+  const handleZoomIn = () => zoomAtPoint((previousZoom) => Math.min(MAX_ZOOM, previousZoom + 0.5));
+  const handleZoomOut = () => zoomAtPoint((previousZoom) => Math.max(MIN_ZOOM, previousZoom - 0.5));
+  const handleFitToScreen = () => {
     if (imageDimensions) {
       setZoom(calculateFitZoom(imageDimensions.width, imageDimensions.height));
-    } else {
-      setZoom(1);
     }
   };
+  const handleResetZoom = () => zoomAtPoint(() => 1);
+
+  const handlePreviewMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 1) return;
+    const container = previewBoxRef.current;
+    if (!container) return;
+    e.preventDefault();
+    previewPanRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startScrollLeft: container.scrollLeft,
+      startScrollTop: container.scrollTop,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const panState = previewPanRef.current;
+      const currentContainer = previewBoxRef.current;
+      if (!panState || !currentContainer) return;
+      currentContainer.scrollLeft = panState.startScrollLeft - (moveEvent.clientX - panState.startX);
+      currentContainer.scrollTop = panState.startScrollTop - (moveEvent.clientY - panState.startY);
+    };
+
+    const handleMouseUp = () => {
+      previewPanRef.current = null;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  const handlePreviewWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const container = previewBoxRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    zoomAtPoint(
+      (previousZoom) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, previousZoom * (e.deltaY < 0 ? 1.15 : 0.87))),
+      { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    );
+  }, [zoomAtPoint]);
 
   const findTransparentBounds = async () => {
     if (!previewImage || !imageDimensions) return;
@@ -247,7 +315,7 @@ const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
             <button
               id="btn-crop-zoom-out"
               onClick={handleZoomOut}
-              disabled={zoom <= 0.1}
+              disabled={zoom <= MIN_ZOOM}
               className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               title="Zoom out"
               aria-label="Zoom out"
@@ -258,12 +326,21 @@ const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
             <button
               id="btn-crop-zoom-in"
               onClick={handleZoomIn}
-              disabled={zoom >= 5}
+              disabled={zoom >= MAX_ZOOM}
               className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               title="Zoom in"
               aria-label="Zoom in"
             >
               +
+            </button>
+            <button
+              id="btn-crop-zoom-fit"
+              onClick={handleFitToScreen}
+              className="text-xs px-2 py-1 text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+              title="Fit to screen"
+              aria-label="Fit preview to screen"
+            >
+              Fit
             </button>
             <button
               id="btn-crop-zoom-reset"
@@ -293,11 +370,18 @@ const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
           <div>
             <span className="text-gray-500">Crop:</span> {cropRect ? `${Math.round(cropRect.width)}×${Math.round(cropRect.height)}` : '—'}
           </div>
+          <div className="text-gray-500">Scroll to zoom • Middle-drag to pan</div>
         </div>
 
-        <div className="flex-1 relative w-full bg-gray-900 rounded border border-gray-700 overflow-auto" ref={previewBoxRef}>
+        <div
+          className="flex-1 relative w-full bg-gray-900 rounded border border-gray-700 overflow-auto"
+          ref={previewBoxRef}
+          onMouseDown={handlePreviewMouseDown}
+          onAuxClick={(e) => { if (e.button === 1) e.preventDefault(); }}
+          onWheel={handlePreviewWheel}
+        >
           {previewImage ? (
-            <div ref={imgContainerRef} style={{ display: 'inline-block', padding: 10, position: 'relative' }}>
+            <div ref={imgContainerRef} style={{ display: 'inline-block', padding: PREVIEW_PADDING, position: 'relative' }}>
               <img
                 ref={imgRef}
                 src={previewImage}
@@ -309,6 +393,7 @@ const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
                   display: 'block',
                   maxWidth: 'none',
                   userSelect: 'none',
+                  imageRendering: 'pixelated',
                 }}
               />
 
@@ -316,8 +401,8 @@ const CropModal: React.FC<CropModalProps> = ({ isOpen, onClose, layer }) => {
                 <div
                   style={{
                     position: 'absolute',
-                    left: 10 + cropRect.x * zoom,
-                    top: 10 + cropRect.y * zoom,
+                    left: PREVIEW_PADDING + cropRect.x * zoom,
+                    top: PREVIEW_PADDING + cropRect.y * zoom,
                     width: Math.max(0, cropRect.width * zoom),
                     height: Math.max(0, cropRect.height * zoom),
                     boxSizing: 'border-box',

@@ -319,6 +319,25 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
     }
   }, [imgDim]);
 
+  const fitPreviewToScreen = useCallback(() => {
+    const container = containerRef.current;
+    if (!imgDim || !container) return;
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    if (containerWidth <= 0 || containerHeight <= 0) return;
+    const fit = Math.max(0.05, Math.min(containerWidth / imgDim.w, containerHeight / imgDim.h) * 0.9);
+    setZoom(fit);
+    setPan({
+      x: (containerWidth - imgDim.w * fit) / 2,
+      y: (containerHeight - imgDim.h * fit) / 2,
+    });
+  }, [imgDim]);
+
+  const resetPreviewZoom = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
   // ─── AI Auto-Remove ───────────────────────────────────────────────────
   const handleAiRemove = async () => {
     if (!workingImage) return;
@@ -930,16 +949,18 @@ const BgRemovalModal: React.FC<BgRemovalModalProps> = ({ isOpen, onClose, layer 
             <span className="text-gray-400 min-w-[40px] text-center">{Math.round(zoom * 100)}%</span>
             <button onClick={() => setZoom(z => Math.min(10, z + 0.25))} className="px-1.5 py-0.5 text-gray-400 hover:text-white bg-gray-700 rounded">+</button>
             <button
-              onClick={() => {
-                if (imgDim && containerRef.current) {
-                  const fit = Math.min(containerRef.current.clientWidth / imgDim.w, containerRef.current.clientHeight / imgDim.h) * 0.9;
-                  setZoom(Math.max(0.05, fit));
-                  setPan({ x: 0, y: 0 });
-                }
-              }}
+              onClick={fitPreviewToScreen}
               className="text-gray-400 hover:text-white bg-gray-700 rounded px-2 py-0.5"
+              title="Fit to screen"
             >
               Fit
+            </button>
+            <button
+              onClick={resetPreviewZoom}
+              className="text-gray-400 hover:text-white bg-gray-700 rounded px-2 py-0.5"
+              title="Reset zoom"
+            >
+              Reset
             </button>
             <span className="text-gray-500 ml-1">Middle-click to pan, scroll to zoom</span>
           </div>
